@@ -21,7 +21,7 @@ Django REST API backend for **Mama Health**, a pregnancy-care platform. Three se
 
 1. **Accounts**: Patients self-register + verify email. **Doctors are admin-provisioned only** (invite-link flow) — no public doctor signup. **Admin accounts are never created via HTTP** — only `python manage.py createsuperuser` or `python manage.py seed_admin` (reads `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` from env).
 2. **Video consultation**: `Appointment.appointment_type = "video_consultation"` + nullable `meeting_link` field only. No real video SDK (Agora/Twilio/Jitsi) integration in v1.
-3. **Third-party integrations** (AI provider, WhatsApp Business API, Firebase Cloud Messaging, Google Places): client will supply real credentials **later**. Every integration is a pluggable adapter selected via env var presence, with a safe null/no-op fallback — the system must run end-to-end today and accept real keys later with **zero code changes**. This pattern lives in `notifications/adapters/factory.py` (template for all others) and is replicated in `ai_assistant/providers/factory.py` (Phase 7) and `hospitals/services.py` (Phase 6).
+3. **Third-party integrations** (AI provider, WhatsApp Business API, Firebase Cloud Messaging, Google Places): client will supply real credentials **later**. Every integration is a pluggable adapter selected via env var presence, with a safe null/no-op fallback — the system must run end-to-end today and accept real keys later with **zero code changes**. This pattern lives in `notifications/adapters/factory.py` (template for all others), and `hospitals/services.py::get_nearby_hospitals` follows the same shape (raises a clear 503 instead of crashing when `GOOGLE_PLACES_API_KEY` is unset). Still to replicate: `ai_assistant/providers/factory.py` (Phase 7).
 4. **Hospitals**: live proxy to Google Places Nearby Search (not an internally managed table), Redis-cached by rounded lat/lng grid cell to control API cost.
 5. **No file/media uploads in v1** — all three Flutter clients use icon placeholders for profile pictures, not uploaded images. There is intentionally no S3/Cloudinary/media storage config — do not add one back without asking.
 6. **Deployment target**: Render.com. Web service (gunicorn) + 2 background workers (Celery worker, Celery beat) + managed Postgres + managed Redis, defined in `render.yaml`. Local dev: Postgres + Redis run in Docker (`docker-compose.yml`), the Django app runs natively via `manage.py runserver` — **never containerize the Django app itself for local dev**, the owner explicitly doesn't want that.
@@ -43,10 +43,10 @@ One Django app per bounded context, all under `apps/`:
 | `diet` | Doctor-authored `DietPlan` (meals, foods to avoid, hydration target) | ✅ built (Phase 4) |
 | `medicines` | `MedicineReminder` + `MedicineIntakeLog` | ✅ built (Phase 4) |
 | `notifications` | In-app `Notification`, FCM/WhatsApp adapters, Celery reminder/broadcast tasks | ✅ built (Phase 5) |
-| `hospitals` | Google Places proxy, Redis-cached | ⏳ not started (Phase 6) |
+| `hospitals` | Google Places proxy, Redis-cached | ✅ built (Phase 6) |
 | `ai_assistant` | `ChatSession`/`ChatMessage`, OpenAI/Gemini adapter, en/ur | ⏳ not started (Phase 7) |
 | `reports` | Cross-app aggregation: doctor patient-summary, admin stats/broadcast, doctor/patient list-with-filters | ⏳ not started (Phase 8) |
-| `emergency` | `EmergencySOSEvent` + fan-out via `notifications` | ⏳ not started (Phase 6) |
+| `emergency` | `EmergencySOSEvent` + fan-out via `notifications` | ✅ built (Phase 6) |
 
 No separate "admin" Django app — Admin is a permission tier (`IsAdmin`), not a domain. Admin-only endpoints live in the app they belong to.
 
@@ -127,7 +127,7 @@ GET             /api/v1/medicines/intake-logs/{,{id}/}        read-only, scoped 
 
 ## Notifications architecture (built, Phase 5)
 
-`apps/notifications/services.py::notify(recipient, notification_type, title, body, data, channels=[...])` is the single call site every other app uses — always writes a `Notification` row first (source of truth for the inbox), then best-effort dispatches push/WhatsApp via `apps/notifications/adapters/factory.py::get_push_adapter()` / `get_whatsapp_adapter()` (env-presence-keyed, `Null*Adapter` fallback, failures logged and never raise). **This factory pattern is the template every pluggable integration in this project follows** — replicate it exactly for `ai_assistant/providers/factory.py` (Phase 7) and `hospitals/services.py` (Phase 6).
+`apps/notifications/services.py::notify(recipient, notification_type, title, body, data, channels=[...])` is the single call site every other app uses — always writes a `Notification` row first (source of truth for the inbox), then best-effort dispatches push/WhatsApp via `apps/notifications/adapters/factory.py::get_push_adapter()` / `get_whatsapp_adapter()` (env-presence-keyed, `Null*Adapter` fallback, failures logged and never raise). **This factory pattern is the template every pluggable integration in this project follows** — replicate it exactly for `ai_assistant/providers/factory.py` (Phase 7).
 
 ```
 GET  /api/v1/notifications/                     own inbox (scoped by recipient)
@@ -144,7 +144,16 @@ POST /api/v1/notifications/send-to-patient/      doctor only, assignment-checked
 - `cleanup_expired_invites_and_tokens` (daily, 02:00 UTC).
 - `broadcast_notification` — NOT scheduled; triggered on-demand via `.delay()` from `BroadcastView`.
 
-**Already wired into other apps** (not just built and left unused): `appointments/services.py::book_appointment` notifies the doctor (push+whatsapp); `transition_status` notifies whichever party didn't make the change (or both, if an admin made it); `diet/services.py::create_diet_plan`/`update_diet_plan` notify the patient. When Phase 6 (emergency) and future phases add new state-changing actions, wire a `notify()` call the same way rather than leaving it for later.
+**Already wired into other apps** (not just built and left unused): `appointments/services.py::book_appointment` notifies the doctor (push+whatsapp); `transition_status` notifies whichever party didn't make the change (or both, if an admin made it); `diet/services.py::create_diet_plan`/`update_diet_plan` notify the patient; `emergency/tasks.py::fan_out_sos_alert` (Phase 6) notifies every assigned doctor + all admins. When future phases add new state-changing actions, wire a `notify()` call the same way rather than leaving it for later.
+
+## Hospitals & Emergency endpoints (built, Phase 6)
+
+```
+GET  /api/v1/hospitals/nearby/?lat=..&lng=..&radius=5000   any authenticated user; 503 (not a crash) if unconfigured/upstream fails
+GET/POST /api/v1/emergency/sos/{,{id}/}    create is patient-only (SOS can't be triggered "on behalf of" someone)
+POST /api/v1/emergency/sos/{id}/resolve/   {status: resolved|false_alarm} — patient (self), assigned doctor, or admin
+```
+`EmergencySOSViewSet` is another bespoke-scoping case worth noting alongside Appointment: creation is patient-only via `get_permissions()` override (not the generic on-behalf-of pattern), because triggering someone else's SOS doesn't make sense. Reads use the normal `PatientScopedQuerysetMixin` though, since resolving is legitimately a doctor/admin action.
 
 ## Local dev setup
 
@@ -176,8 +185,8 @@ Shared fixtures live in the **root** `conftest.py` (not inside an app) so they'r
 3. ✅ Health tracking — vitals, symptoms (upsert-by-day), water/kick trackers, computed pregnancy progress, seeded baby-size reference; 20 passing tests, plus a global fix: error responses now always carry a specific, actionable `detail` message — see "Error responses" convention above
 4. ✅ Diet & Medicines — doctor-authored diet plans with one-active-per-patient history, medicine reminders + intake logging; 21 passing tests (75 total across the project). Also fixed a real bug found here: the shared `PatientOwnedModelSerializer.validate()` didn't distinguish create vs. update, so every doctor-side PATCH was wrongly 400ing — see the "Key modeling patterns" subtlety note above.
 5. ✅ Notifications infra — in-app inbox, pluggable FCM/WhatsApp adapters (null fallbacks confirmed working end-to-end without real credentials), 4 seeded Celery Beat jobs, wired into appointments/diet as real triggers, not left dangling; 21 passing tests (96 total)
-6. ⏳ **Next**: Hospitals proxy + Emergency SOS
-7. AI Assistant
+6. ✅ Hospitals proxy + Emergency SOS — Google Places Nearby Search proxy (Redis-cached by rounded lat/lng grid cell, 503 with a clear message on missing key or upstream failure, never a raw error), patient-initiated SOS with Celery-driven fan-out to assigned doctors + all admins + a direct WhatsApp message to the emergency contact (not a Notification row, since the contact isn't a system User); 18 passing tests (114 total)
+7. ⏳ **Next**: AI Assistant
 8. Reports + admin aggregate views
 9. Hardening pass (permission-matrix audit, rate-limit tuning, prod settings review, final Swagger pass)
 

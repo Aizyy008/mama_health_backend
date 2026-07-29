@@ -1,3 +1,8 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
 
-urlpatterns = []
+from apps.emergency.views import EmergencySOSViewSet
+
+router = DefaultRouter()
+router.register("sos", EmergencySOSViewSet, basename="emergency-sos")
+
+urlpatterns = router.urls
