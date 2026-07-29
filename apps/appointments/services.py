@@ -19,9 +19,9 @@ ALLOWED_TRANSITIONS = {
 @transaction.atomic
 def book_appointment(*, patient, doctor, appointment_type, scheduled_at, duration_minutes=30, reason=""):
     if doctor.role != Role.DOCTOR:
-        raise ValueError("Selected user is not a doctor.")
+        raise ValueError("Please select a valid doctor to book with.")
     if patient.role != Role.PATIENT:
-        raise ValueError("Selected user is not a patient.")
+        raise ValueError("Please select a valid patient for this appointment.")
 
     appointment = Appointment.objects.create(
         patient=patient,

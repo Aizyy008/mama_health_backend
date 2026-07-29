@@ -25,7 +25,9 @@ class RegisterSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("An account with this email already exists.")
+            raise serializers.ValidationError(
+                "An account with this email already exists. Please log in or use a different email."
+            )
         return value
 
     def create(self, validated_data):
@@ -56,11 +58,15 @@ class PasswordChangeSerializer(serializers.Serializer):
     def validate_old_password(self, value):
         user = self.context["request"].user
         if not user.check_password(value):
-            raise serializers.ValidationError("Old password is incorrect.")
+            raise serializers.ValidationError("The old password you entered is incorrect. Please try again.")
         return value
 
 
 class MamaHealthTokenObtainPairSerializer(TokenObtainPairSerializer):
+    default_error_messages = {
+        "no_active_account": "Please enter a valid email and password.",
+    }
+
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
@@ -139,9 +145,13 @@ class DoctorInviteSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
+            raise serializers.ValidationError(
+                "A user with this email already exists. Please use a different email address."
+            )
         if DoctorInvite.objects.filter(email__iexact=value, status=DoctorInvite.Status.PENDING).exists():
-            raise serializers.ValidationError("An invite is already pending for this email.")
+            raise serializers.ValidationError(
+                "An invite is already pending for this email. Please wait for it to be accepted or expire."
+            )
         return value
 
 
