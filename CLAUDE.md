@@ -45,7 +45,7 @@ One Django app per bounded context, all under `apps/`:
 | `notifications` | In-app `Notification`, FCM/WhatsApp adapters, Celery reminder/broadcast tasks | ✅ built (Phase 5) |
 | `hospitals` | Google Places proxy, Redis-cached | ✅ built (Phase 6) |
 | `ai_assistant` | `ChatSession`/`ChatMessage`, OpenAI/Gemini adapter, en/ur | ✅ built (Phase 7) |
-| `reports` | Cross-app aggregation: doctor patient-summary, admin stats/broadcast, doctor/patient list-with-filters | ⏳ not started (Phase 8) |
+| `reports` | Cross-app aggregation: patient/doctor summary report, admin system stats | ✅ built (Phase 8) |
 | `emergency` | `EmergencySOSEvent` + fan-out via `notifications` | ✅ built (Phase 6) |
 
 No separate "admin" Django app — Admin is a permission tier (`IsAdmin`), not a domain. Admin-only endpoints live in the app they belong to.
@@ -165,6 +165,14 @@ GET/POST      /api/v1/ai/sessions/{id}/messages/  GET: full history. POST: {cont
 
 **DRF `@action` gotcha hit in Phase 7**: two separately-named `@action`-decorated methods that happen to share the same `url_path` do **not** get merged into one route by the router — each becomes its own urlpattern with the identical path regex, and Django's resolver commits to the *first* one that matches the path, regardless of HTTP method, so the second one's method(s) 405 unreachably. To handle GET+POST at the same sub-resource URL (e.g. `sessions/{id}/messages/`), it must be **one** `@action(methods=["get", "post"], url_path="messages")` dispatching internally on `request.method` — see `ChatSessionViewSet.messages`. Same applies to any future sub-resource collection endpoint.
 
+## Reports endpoints (built, Phase 8)
+
+```
+GET /api/v1/reports/patient-summary/   patient: own; doctor/admin: ?patient_id= via resolve_patient_from_request
+GET /api/v1/reports/admin/stats/       admin only — counts (patients, doctors, appointments, active SOS, etc.)
+```
+`reports` has **no models of its own** — it's a pure cross-app read aggregator (`apps/reports/services.py` queries `health`/`diet`/`appointments`/`medicines` directly), which is exactly why it was built last: every other app's shape had to be settled first. The doc's admin "Manage doctors" / "Manage patients" / "View all appointments" features are **not** duplicated here — they already exist as `accounts.DoctorViewSet`, `accounts.PatientListView`, and `appointments.AppointmentViewSet` (admin sees all rows on each via the existing role-scoping). PDF export ("Generate reports" beyond JSON) is explicitly out of v1 scope per the doc's Future Enhancements list — don't add a PDF library unless asked.
+
 ## Local dev setup
 
 ```bash
@@ -197,8 +205,8 @@ Shared fixtures live in the **root** `conftest.py` (not inside an app) so they'r
 5. ✅ Notifications infra — in-app inbox, pluggable FCM/WhatsApp adapters (null fallbacks confirmed working end-to-end without real credentials), 4 seeded Celery Beat jobs, wired into appointments/diet as real triggers, not left dangling; 21 passing tests (96 total)
 6. ✅ Hospitals proxy + Emergency SOS — Google Places Nearby Search proxy (Redis-cached by rounded lat/lng grid cell, 503 with a clear message on missing key or upstream failure, never a raw error), patient-initiated SOS with Celery-driven fan-out to assigned doctors + all admins + a direct WhatsApp message to the emergency contact (not a Notification row, since the contact isn't a system User); 18 passing tests (114 total)
 7. ✅ AI Assistant — `ChatSession`/`ChatMessage`, OpenAI/Gemini adapters (`google-genai`, not the deprecated `google-generativeai`) with a `NullAIProvider` returning a clean 503 when unconfigured, patient-only access, 20/hour throttle scope already wired from Phase 0's settings; 8 passing tests (122 total)
-8. ⏳ **Next**: Reports + admin aggregate views
-9. Hardening pass (permission-matrix audit, rate-limit tuning, prod settings review, final Swagger pass)
+8. ✅ Reports + admin aggregate views — pure cross-app aggregation, no new models: patient summary (pregnancy progress, latest vitals, active diet plan, upcoming appointments, 7-day symptoms/medicine adherence) reusing `resolve_patient_from_request`, plus admin system stats (counts only — PDF export is explicitly out of v1 scope per the doc); 8 passing tests (130 total)
+9. ⏳ **Next**: Hardening pass (permission-matrix audit, rate-limit tuning, prod settings review, final Swagger pass)
 
 **When resuming work**: check the status table above, `git log` for what's actually committed, and continue from the first ⏳ phase. Update this file's status table and roadmap section as each phase completes — it is the persistent memory for this project across machines/sessions.
 
