@@ -195,6 +195,8 @@ python manage.py runserver
 
 Note: Redis in `docker-compose.yml` is mapped to host port **6380** (not 6379) because another unrelated project's Redis container already occupies 6379 on this dev machine — that's a local-machine quirk, not a project requirement. On a fresh machine, port 6379 may be free; either port works as long as `.env`'s `REDIS_URL` matches the compose mapping.
 
+**`python manage.py seed_test_data`** (`apps/accounts/management/commands/seed_test_data.py`) — creates `patient@test.com` / `doctor@test.com` / `admin@test.com` (password `TestPass123!` for all, pre-verified) plus sample data across every app. Built specifically for the Flutter handoff: patients can't normally skip email verification and doctors can't normally self-register at all, so without this a frontend dev would be blocked immediately. Refuses to run unless `DEBUG=True` (checked at the top of `handle()`) — never wire this into a prod deploy step. Idempotent — every write is behind a `get_or_create`/`update_or_create`/`.exists()` guard, safe to re-run. **When adding a new app/model, add a seed helper here too** — an empty list/detail screen on first frontend integration is a bad first impression and defeats the point of this command.
+
 ## Testing
 
 ```bash

@@ -28,6 +28,9 @@ python manage.py runserver
 
 # 5. Create an admin account (never via HTTP — see apps/accounts/management/commands/seed_admin.py)
 python manage.py createsuperuser
+
+# 6. (Optional, dev only) Seed ready-to-use test accounts + sample data
+python manage.py seed_test_data
 ```
 
 - API docs (Swagger UI): http://127.0.0.1:8000/api/docs/
@@ -44,10 +47,22 @@ celery -A config beat -l info --scheduler django_celery_beat.schedulers:Database
 
 ## API handoff for the Flutter team
 
-The full API surface is documented via Swagger/OpenAPI (drf-spectacular), grouped into tags matching the app list below — that tag taxonomy is effectively the table of contents for integration. Besides the live Swagger UI, a versioned snapshot is committed at [`docs/openapi.yaml`](docs/openapi.yaml) so the contract can be browsed/diffed without running the server. Regenerate it after any endpoint change:
+The full API surface is documented via Swagger/OpenAPI (drf-spectacular), grouped into tags matching the app list below — that tag taxonomy is effectively the table of contents for integration. Besides the live Swagger UI, a versioned snapshot is committed at [`docs/openapi.yaml`](docs/openapi.yaml) so the contract can be browsed/diffed without running the server, or imported directly into Postman/Insomnia to auto-generate a request collection. Regenerate it after any endpoint change:
 ```bash
 python manage.py spectacular --file docs/openapi.yaml
 ```
+
+### Test accounts (for local integration — not real credentials)
+
+Running `python manage.py seed_test_data` (dev only, refuses to run when `DEBUG=False`) creates three pre-verified accounts, all with password `TestPass123!`, plus realistic sample data across every app (an appointment history, health readings, an active diet plan, a medicine reminder with intake logs, notifications, exercise videos, an AI chat session, a resolved SOS event) so list/detail screens aren't empty on first integration:
+
+| Email | Role | Notes |
+|---|---|---|
+| `patient@test.com` | patient | Sara Ahmed — profile complete, 12 weeks pregnant |
+| `doctor@test.com` | doctor | Dr. Ayesha Malik — assigned to the test patient via their seeded appointments |
+| `admin@test.com` | admin | Full system access |
+
+Patients can't normally skip email verification, and doctor accounts can't normally self-register at all — this command exists specifically so a frontend developer isn't blocked by either of those in a local/dev environment. It's idempotent (safe to re-run) and creates no accounts or data outside `DEBUG=True`.
 
 ## Running tests
 
