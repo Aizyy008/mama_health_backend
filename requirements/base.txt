@@ -11,3 +11,4 @@ django-celery-beat>=2.9,<2.10
 django-redis>=6.0,<6.1
 whitenoise>=6.12,<6.13
 requests>=2.34,<2.35
+firebase-admin>=7.5,<7.6

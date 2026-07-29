@@ -15,6 +15,7 @@ def create_diet_plan(*, patient, created_by, meals=None, foods_to_avoid=None, **
     FoodAvoidanceItem.objects.bulk_create(
         [FoodAvoidanceItem(diet_plan=plan, **food) for food in (foods_to_avoid or [])]
     )
+    _notify_diet_updated(plan)
     return plan
 
 
@@ -32,4 +33,18 @@ def update_diet_plan(*, plan, meals=None, foods_to_avoid=None, **fields):
         FoodAvoidanceItem.objects.bulk_create(
             [FoodAvoidanceItem(diet_plan=plan, **food) for food in foods_to_avoid]
         )
+    _notify_diet_updated(plan)
     return plan
+
+
+def _notify_diet_updated(plan: DietPlan):
+    from apps.notifications import services as notification_services
+
+    notification_services.notify(
+        recipient=plan.patient,
+        notification_type="diet",
+        title="Your diet plan was updated",
+        body="Your doctor has updated your diet plan. Open the app to see the latest recommendations.",
+        data={"diet_plan_id": plan.id},
+        channels=["push"],
+    )

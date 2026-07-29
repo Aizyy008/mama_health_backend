@@ -42,7 +42,7 @@ One Django app per bounded context, all under `apps/`:
 | `health` | Blood pressure, blood sugar, symptoms, water intake, kick counter, pregnancy progress (computed, not stored), baby-size-by-week static reference | ✅ built (Phase 3) |
 | `diet` | Doctor-authored `DietPlan` (meals, foods to avoid, hydration target) | ✅ built (Phase 4) |
 | `medicines` | `MedicineReminder` + `MedicineIntakeLog` | ✅ built (Phase 4) |
-| `notifications` | In-app `Notification`, FCM/WhatsApp adapters, Celery reminder/broadcast tasks | ⏳ not started (Phase 5) |
+| `notifications` | In-app `Notification`, FCM/WhatsApp adapters, Celery reminder/broadcast tasks | ✅ built (Phase 5) |
 | `hospitals` | Google Places proxy, Redis-cached | ⏳ not started (Phase 6) |
 | `ai_assistant` | `ChatSession`/`ChatMessage`, OpenAI/Gemini adapter, en/ur | ⏳ not started (Phase 7) |
 | `reports` | Cross-app aggregation: doctor patient-summary, admin stats/broadcast, doctor/patient list-with-filters | ⏳ not started (Phase 8) |
@@ -125,15 +125,26 @@ GET             /api/v1/medicines/intake-logs/{,{id}/}        read-only, scoped 
 ```
 `DietPlan`: only one `is_active=True` plan per patient — creating a new one deactivates (never deletes) the previous, preserving history (`apps/diet/services.py`). Meals/foods-to-avoid are nested writable serializers, replaced wholesale on update (delete + bulk_create), not diffed.
 
-## Notifications architecture (design target for Phase 5 — not yet built)
+## Notifications architecture (built, Phase 5)
 
-```python
-def get_push_adapter():
-    return FCMPushAdapter() if settings.FCM_CREDENTIALS_JSON else NullPushAdapter()
-def get_whatsapp_adapter():
-    return WhatsAppBusinessAPIAdapter() if settings.WHATSAPP_API_TOKEN else NullWhatsAppAdapter()
+`apps/notifications/services.py::notify(recipient, notification_type, title, body, data, channels=[...])` is the single call site every other app uses — always writes a `Notification` row first (source of truth for the inbox), then best-effort dispatches push/WhatsApp via `apps/notifications/adapters/factory.py::get_push_adapter()` / `get_whatsapp_adapter()` (env-presence-keyed, `Null*Adapter` fallback, failures logged and never raise). **This factory pattern is the template every pluggable integration in this project follows** — replicate it exactly for `ai_assistant/providers/factory.py` (Phase 7) and `hospitals/services.py` (Phase 6).
+
 ```
-A `NotificationService.notify(recipient, type, title, body, data, channels=[...])` is the single call site every other app uses. It always writes a `Notification` row first, then best-effort dispatches push/WhatsApp (failures logged, never block the request). Celery Beat jobs: medicine reminders (~5 min), appointment reminders (~15–60 min), weekly pregnancy update (daily), invite/token cleanup (daily). Emergency SOS fan-out is on-demand via `.delay()`, not scheduled.
+GET  /api/v1/notifications/                     own inbox (scoped by recipient)
+POST /api/v1/notifications/{id}/mark-read/
+POST /api/v1/notifications/mark-all-read/
+POST /api/v1/notifications/broadcast/            admin only; fans out via Celery (.delay()), returns 202 immediately
+POST /api/v1/notifications/send-to-patient/      doctor only, assignment-checked; ad-hoc "doctor message"
+```
+
+**Celery Beat jobs** (`apps/notifications/tasks.py`, schedules seeded via a data migration — `apps/notifications/migrations/0002_seed_periodic_tasks.py`, using `django_celery_beat.PeriodicTask`/`IntervalSchedule`/`CrontabSchedule` so they're DB-editable without a deploy):
+- `send_medicine_reminders` (every 5 min) — idempotent via a `MedicineIntakeLog` existence check for the exact `scheduled_for` timestamp.
+- `send_appointment_reminders` (every 15 min, 60-min lookahead window) — idempotent via `Appointment.reminder_sent_at` (added in Phase 5 specifically for this).
+- `send_weekly_pregnancy_update` (daily, 08:00 UTC) — only actually notifies patients whose `days_pregnant % 7 == 0`, so running once/day is naturally idempotent with no extra state.
+- `cleanup_expired_invites_and_tokens` (daily, 02:00 UTC).
+- `broadcast_notification` — NOT scheduled; triggered on-demand via `.delay()` from `BroadcastView`.
+
+**Already wired into other apps** (not just built and left unused): `appointments/services.py::book_appointment` notifies the doctor (push+whatsapp); `transition_status` notifies whichever party didn't make the change (or both, if an admin made it); `diet/services.py::create_diet_plan`/`update_diet_plan` notify the patient. When Phase 6 (emergency) and future phases add new state-changing actions, wire a `notify()` call the same way rather than leaving it for later.
 
 ## Local dev setup
 
@@ -164,8 +175,8 @@ Shared fixtures live in the **root** `conftest.py` (not inside an app) so they'r
 2. ✅ Appointments + `PatientDoctorAssignment` — booking, status state machine, doctor notes, doctor-scoped `PatientListView`; 13 passing tests
 3. ✅ Health tracking — vitals, symptoms (upsert-by-day), water/kick trackers, computed pregnancy progress, seeded baby-size reference; 20 passing tests, plus a global fix: error responses now always carry a specific, actionable `detail` message — see "Error responses" convention above
 4. ✅ Diet & Medicines — doctor-authored diet plans with one-active-per-patient history, medicine reminders + intake logging; 21 passing tests (75 total across the project). Also fixed a real bug found here: the shared `PatientOwnedModelSerializer.validate()` didn't distinguish create vs. update, so every doctor-side PATCH was wrongly 400ing — see the "Key modeling patterns" subtlety note above.
-5. ⏳ **Next**: Notifications infra (Celery/Redis live, adapters with null fallbacks, in-app inbox)
-6. Hospitals proxy + Emergency SOS
+5. ✅ Notifications infra — in-app inbox, pluggable FCM/WhatsApp adapters (null fallbacks confirmed working end-to-end without real credentials), 4 seeded Celery Beat jobs, wired into appointments/diet as real triggers, not left dangling; 21 passing tests (96 total)
+6. ⏳ **Next**: Hospitals proxy + Emergency SOS
 7. AI Assistant
 8. Reports + admin aggregate views
 9. Hardening pass (permission-matrix audit, rate-limit tuning, prod settings review, final Swagger pass)

@@ -44,6 +44,9 @@ class Appointment(TimeStampedModel):
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
     cancellation_reason = models.TextField(blank=True)
+    # Set by notifications.tasks.send_appointment_reminders once a reminder
+    # has gone out, so the periodic task doesn't re-notify on every tick.
+    reminder_sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-scheduled_at"]

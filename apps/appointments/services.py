@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 
 from apps.appointments.models import Appointment, PatientDoctorAssignment
 from apps.core.constants import Role
@@ -38,6 +39,19 @@ def book_appointment(*, patient, doctor, appointment_type, scheduled_at, duratio
         doctor=doctor,
         defaults={"is_primary": not has_existing_assignment},
     )
+
+    from apps.notifications import services as notification_services
+
+    patient_label = patient.get_full_name() or patient.email
+    when = timezone.localtime(appointment.scheduled_at).strftime("%b %d, %H:%M")
+    notification_services.notify(
+        recipient=doctor,
+        notification_type="appointment",
+        title="New appointment booked",
+        body=f"{patient_label} booked an appointment with you on {when}.",
+        data={"appointment_id": appointment.id},
+        channels=["push", "whatsapp"],
+    )
     return appointment
 
 
@@ -51,4 +65,29 @@ def transition_status(*, appointment: Appointment, new_status: str, actor, cance
         appointment.cancelled_by = actor
         appointment.cancellation_reason = cancellation_reason
     appointment.save(update_fields=["status", "cancelled_by", "cancellation_reason", "updated_at"])
+    _notify_status_change(appointment=appointment, actor=actor)
     return appointment
+
+
+def _notify_status_change(*, appointment: Appointment, actor):
+    from apps.notifications import services as notification_services
+
+    if actor.id == appointment.patient_id:
+        recipients = [appointment.doctor]
+    elif actor.id == appointment.doctor_id:
+        recipients = [appointment.patient]
+    else:  # admin (or another system actor) changed it — notify both parties
+        recipients = [appointment.patient, appointment.doctor]
+
+    status_label = appointment.get_status_display().lower()
+    when = timezone.localtime(appointment.scheduled_at).strftime("%b %d, %H:%M")
+    for recipient in recipients:
+        channels = ["push", "whatsapp"] if recipient.role == Role.DOCTOR else ["push"]
+        notification_services.notify(
+            recipient=recipient,
+            notification_type="appointment",
+            title="Appointment update",
+            body=f"Your appointment on {when} is now {status_label}.",
+            data={"appointment_id": appointment.id, "status": appointment.status},
+            channels=channels,
+        )
