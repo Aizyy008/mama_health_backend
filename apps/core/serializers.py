@@ -3,6 +3,17 @@ from rest_framework import serializers
 from apps.core.constants import Role
 
 
+class DetailResponseSerializer(serializers.Serializer):
+    """Generic {"detail": ..., "errors": ...} envelope — used purely to give
+    non-default-status Swagger responses (201/400/403/404/503/etc.) a real
+    schema entry so their OpenApiExample(status_codes=[...]) actually
+    attaches instead of being silently dropped. Never used for real request
+    validation, only as a `responses=` type hint for drf-spectacular."""
+
+    detail = serializers.CharField()
+    errors = serializers.JSONField(required=False, allow_null=True)
+
+
 class PatientOwnedModelSerializer(serializers.ModelSerializer):
     """
     Base for any model with a `patient` FK, owned by a specific patient but
