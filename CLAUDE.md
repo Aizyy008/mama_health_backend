@@ -39,7 +39,7 @@ One Django app per bounded context, all under `apps/`:
 | `core` | Base model mixins, `Role` enum, permission classes, `PatientScopedQuerysetMixin`, pagination, exception handler, `/healthz/` | ✅ built |
 | `accounts` | Custom `User` (email-based, `role` field), `PatientProfile`, `DoctorProfile`, `DoctorInvite`, email verification, JWT auth, doctor invite/provisioning | ✅ built (Phase 1) |
 | `appointments` | `Appointment`, `PatientDoctorAssignment` (the derived doctor↔patient access table every other app checks) | ✅ built (Phase 2) |
-| `health` | Blood pressure, blood sugar, symptoms, water intake, kick counter, pregnancy progress (computed, not stored), baby-size-by-week static reference | ⏳ not started (Phase 3) |
+| `health` | Blood pressure, blood sugar, symptoms, water intake, kick counter, pregnancy progress (computed, not stored), baby-size-by-week static reference | ✅ built (Phase 3) |
 | `diet` | Doctor-authored `DietPlan` (meals, foods to avoid, hydration target) | ⏳ not started (Phase 4) |
 | `medicines` | `MedicineReminder` + `MedicineIntakeLog` | ⏳ not started (Phase 4) |
 | `notifications` | In-app `Notification`, FCM/WhatsApp adapters, Celery reminder/broadcast tasks | ⏳ not started (Phase 5) |
@@ -57,7 +57,9 @@ No separate "admin" Django app — Admin is a permission tier (`IsAdmin`), not a
 - **RBAC**: `apps/core/permissions.py` has `IsPatient`, `IsDoctor`, `IsAdmin`, `IsDoctorOrAdmin`, `IsOwnerPatientOrAssignedDoctorOrAdmin`. `apps/core/viewsets.py` has `PatientScopedQuerysetMixin` (auto-scopes `get_queryset()` by role for any model with a `patient` FK) and `PatientOwnedCreateMixin` (forces `patient=request.user` on create when the requester is a patient). **Every new clinical viewset should mix these in rather than reimplementing scoping.**
 - **"Daily reset" data (water intake, kick counter)**: never destructive. Every entry gets a denormalized `log_date`; "today" is a query-time `filter(log_date=today)`. No cron job resets anything — this avoids an entire class of midnight/timezone bugs. Apply this same pattern in `health` (Phase 3).
 - **Computed, not stored**: pregnancy progress is derived from `PatientProfile.lmp_date`/`edd_date` at read time — don't add a `PregnancyProgress` model.
+- **Object-level permissions never run on `create()`** — DRF only calls `has_object_permission` for retrieve/update/destroy, where an object already exists. Any check that depends on *which* patient a doctor is writing a record for (e.g. "is this doctor assigned to this patient?") must live in the **serializer's `validate()`**, not the permission class, or a doctor can write clinical data for any patient globally. This is exactly what `core.serializers.PatientOwnedModelSerializer.validate()` does — reuse it (or replicate the same check) for every new patient-owned write in `diet`/`medicines`/future apps rather than assuming the permission class alone covers writes.
 - **Pluggable third-party adapters**: every optional integration follows the same shape — an abstract adapter class, one or more concrete implementations, a `NullXAdapter`/no-op fallback, and a `get_x_adapter()` factory function keyed off `settings.X_CREDENTIAL` presence. See the template comment in `notifications/adapters/` once Phase 5 lands; until then, follow the shape described in the Notifications section of this file.
+- **Error responses**: every error envelope is `{"detail": <one clear, specific, actionable sentence>, "errors": <per-field breakdown or null>}`, enforced globally by `apps/core/exceptions.py::custom_exception_handler`. `detail` is never a generic placeholder like "Validation failed." — it synthesizes the first real message found (DRF/Django's built-in field messages are already specific, e.g. "This password is too short. It must contain at least 8 characters."). When writing a NEW custom validation message anywhere (serializers, services raising `ValueError` that a view turns into a 400), phrase it as a complete, actionable sentence a patient/doctor could read directly — not a terse fragment. Get the HTTP status code right: 400 validation, 401 unauthenticated, 403 forbidden (authenticated but not allowed), 404 not found/not visible to this role, 429 throttled.
 - **Swagger tags**: every view/viewset gets `@extend_schema(tags=["..."])` (or `@extend_schema_view(...)` for ViewSets) matching the `SPECTACULAR_SETTINGS["TAGS"]` list in `config/settings/base.py` — this tag taxonomy is the actual handoff table of contents for the Flutter developer.
 
 ## Auth endpoints (built, Phase 1)
@@ -92,6 +94,22 @@ POST      /api/v1/appointments/{id}/status/            {status, cancellation_rea
 PATCH     /api/v1/appointments/{id}/doctor-notes/       doctor/admin only
 ```
 Status state machine (`apps/appointments/services.py::ALLOWED_TRANSITIONS`): `pending → confirmed|cancelled`, `confirmed → completed|cancelled|no_show`; `completed`/`cancelled`/`no_show` are terminal. Booking: patients can only book for themselves (payload `patient_id` is ignored/overridden); doctor/admin booking on behalf of a patient must supply `patient_id` or get a 400.
+
+## Health endpoints (built, Phase 3)
+
+```
+GET/POST      /api/v1/health/blood-pressure/{,{id}/}    full CRUD, patient-owned
+GET/POST      /api/v1/health/blood-sugar/{,{id}/}       full CRUD, patient-owned
+GET/POST      /api/v1/health/symptoms/{,{id}/}          POST upserts by (patient, log_date) — see SymptomLogSerializer.create()
+GET/POST      /api/v1/health/water-intake/               append-only (no update/delete)
+GET           /api/v1/health/water-intake/today/         patient-only; aggregated total + today's entries
+GET/POST      /api/v1/health/kick-sessions/               start a session
+POST          /api/v1/health/kick-sessions/{id}/tap/      +1 kick
+POST          /api/v1/health/kick-sessions/{id}/end/      sets ended_at
+GET           /api/v1/health/baby-size/ , /baby-size/{week}/   read-only static reference (seeded)
+GET           /api/v1/health/pregnancy-progress/          patient: own; doctor/admin: ?patient_id=, assignment-checked
+```
+All patient-owned viewsets use `core.viewsets.PatientScopedQuerysetMixin` + `PatientOwnedCreateMixin` + `core.serializers.PatientOwnedModelSerializer` — this is the normal case (contrast with Appointment's bespoke handling above).
 
 ## Notifications architecture (design target for Phase 5 — not yet built)
 
@@ -129,9 +147,9 @@ Shared fixtures live in the **root** `conftest.py` (not inside an app) so they'r
 
 0. ✅ Skeleton — settings split, `core` app, custom `User` model, drf-spectacular, `.env`/`.gitignore`, Render config, local Docker db/redis
 1. ✅ Auth & Accounts — registration/verification/JWT/password-reset/doctor-invite, `/me`, 21 passing tests
-2. ✅ Appointments + `PatientDoctorAssignment` — booking, status state machine, doctor notes, doctor-scoped `PatientListView`; 13 passing tests (34 total across the project)
-3. ⏳ **Next**: Health tracking (BP, blood sugar, symptoms, water, kicks, pregnancy progress, baby-size reference) — apply `PatientScopedQuerysetMixin` + `PatientOwnedCreateMixin` from `core` here (this is the normal single-owner case, unlike Appointment)
-4. Diet & Medicines
+2. ✅ Appointments + `PatientDoctorAssignment` — booking, status state machine, doctor notes, doctor-scoped `PatientListView`; 13 passing tests
+3. ✅ Health tracking — vitals, symptoms (upsert-by-day), water/kick trackers, computed pregnancy progress, seeded baby-size reference; 20 passing tests (54 total across the project, plus a global fix: error responses now always carry a specific, actionable `detail` message — see "Error responses" convention above)
+4. ⏳ **Next**: Diet & Medicines
 5. Notifications infra (Celery/Redis live, adapters with null fallbacks, in-app inbox)
 6. Hospitals proxy + Emergency SOS
 7. AI Assistant
