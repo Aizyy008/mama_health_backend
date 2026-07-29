@@ -1,3 +1,8 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
 
-urlpatterns = []
+from apps.ai_assistant.views import ChatSessionViewSet
+
+router = DefaultRouter()
+router.register("sessions", ChatSessionViewSet, basename="chat-session")
+
+urlpatterns = router.urls

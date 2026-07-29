@@ -21,7 +21,7 @@ Django REST API backend for **Mama Health**, a pregnancy-care platform. Three se
 
 1. **Accounts**: Patients self-register + verify email. **Doctors are admin-provisioned only** (invite-link flow) — no public doctor signup. **Admin accounts are never created via HTTP** — only `python manage.py createsuperuser` or `python manage.py seed_admin` (reads `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` from env).
 2. **Video consultation**: `Appointment.appointment_type = "video_consultation"` + nullable `meeting_link` field only. No real video SDK (Agora/Twilio/Jitsi) integration in v1.
-3. **Third-party integrations** (AI provider, WhatsApp Business API, Firebase Cloud Messaging, Google Places): client will supply real credentials **later**. Every integration is a pluggable adapter selected via env var presence, with a safe null/no-op fallback — the system must run end-to-end today and accept real keys later with **zero code changes**. This pattern lives in `notifications/adapters/factory.py` (template for all others), and `hospitals/services.py::get_nearby_hospitals` follows the same shape (raises a clear 503 instead of crashing when `GOOGLE_PLACES_API_KEY` is unset). Still to replicate: `ai_assistant/providers/factory.py` (Phase 7).
+3. **Third-party integrations** (AI provider, WhatsApp Business API, Firebase Cloud Messaging, Google Places): client will supply real credentials **later**. Every integration is a pluggable adapter selected via env var presence, with a safe null/no-op fallback — the system must run end-to-end today and accept real keys later with **zero code changes**. This pattern lives in `notifications/adapters/factory.py` (template for all others); `hospitals/services.py::get_nearby_hospitals` and `ai_assistant/providers/factory.py` both follow the same shape (raise a clear error — 503, never a crash — when unconfigured).
 4. **Hospitals**: live proxy to Google Places Nearby Search (not an internally managed table), Redis-cached by rounded lat/lng grid cell to control API cost.
 5. **No file/media uploads in v1** — all three Flutter clients use icon placeholders for profile pictures, not uploaded images. There is intentionally no S3/Cloudinary/media storage config — do not add one back without asking.
 6. **Deployment target**: Render.com. Web service (gunicorn) + 2 background workers (Celery worker, Celery beat) + managed Postgres + managed Redis, defined in `render.yaml`. Local dev: Postgres + Redis run in Docker (`docker-compose.yml`), the Django app runs natively via `manage.py runserver` — **never containerize the Django app itself for local dev**, the owner explicitly doesn't want that.
@@ -44,7 +44,7 @@ One Django app per bounded context, all under `apps/`:
 | `medicines` | `MedicineReminder` + `MedicineIntakeLog` | ✅ built (Phase 4) |
 | `notifications` | In-app `Notification`, FCM/WhatsApp adapters, Celery reminder/broadcast tasks | ✅ built (Phase 5) |
 | `hospitals` | Google Places proxy, Redis-cached | ✅ built (Phase 6) |
-| `ai_assistant` | `ChatSession`/`ChatMessage`, OpenAI/Gemini adapter, en/ur | ⏳ not started (Phase 7) |
+| `ai_assistant` | `ChatSession`/`ChatMessage`, OpenAI/Gemini adapter, en/ur | ✅ built (Phase 7) |
 | `reports` | Cross-app aggregation: doctor patient-summary, admin stats/broadcast, doctor/patient list-with-filters | ⏳ not started (Phase 8) |
 | `emergency` | `EmergencySOSEvent` + fan-out via `notifications` | ✅ built (Phase 6) |
 
@@ -127,7 +127,7 @@ GET             /api/v1/medicines/intake-logs/{,{id}/}        read-only, scoped 
 
 ## Notifications architecture (built, Phase 5)
 
-`apps/notifications/services.py::notify(recipient, notification_type, title, body, data, channels=[...])` is the single call site every other app uses — always writes a `Notification` row first (source of truth for the inbox), then best-effort dispatches push/WhatsApp via `apps/notifications/adapters/factory.py::get_push_adapter()` / `get_whatsapp_adapter()` (env-presence-keyed, `Null*Adapter` fallback, failures logged and never raise). **This factory pattern is the template every pluggable integration in this project follows** — replicate it exactly for `ai_assistant/providers/factory.py` (Phase 7).
+`apps/notifications/services.py::notify(recipient, notification_type, title, body, data, channels=[...])` is the single call site every other app uses — always writes a `Notification` row first (source of truth for the inbox), then best-effort dispatches push/WhatsApp via `apps/notifications/adapters/factory.py::get_push_adapter()` / `get_whatsapp_adapter()` (env-presence-keyed, `Null*Adapter` fallback, failures logged and never raise). **This factory pattern is the template every pluggable integration in this project follows** — `ai_assistant/providers/factory.py` (Phase 7) replicates it exactly.
 
 ```
 GET  /api/v1/notifications/                     own inbox (scoped by recipient)
@@ -154,6 +154,16 @@ GET/POST /api/v1/emergency/sos/{,{id}/}    create is patient-only (SOS can't be 
 POST /api/v1/emergency/sos/{id}/resolve/   {status: resolved|false_alarm} — patient (self), assigned doctor, or admin
 ```
 `EmergencySOSViewSet` is another bespoke-scoping case worth noting alongside Appointment: creation is patient-only via `get_permissions()` override (not the generic on-behalf-of pattern), because triggering someone else's SOS doesn't make sense. Reads use the normal `PatientScopedQuerysetMixin` though, since resolving is legitimately a doctor/admin action.
+
+## AI Assistant endpoints (built, Phase 7)
+
+```
+GET/POST      /api/v1/ai/sessions/{,{id}/}       patient-only; one chat thread per session, language set at creation
+GET/POST      /api/v1/ai/sessions/{id}/messages/  GET: full history. POST: {content} → persists user msg, calls provider, persists+returns assistant reply
+```
+`AI_PROVIDER` (`"openai"` | `"gemini"` | unset) + `AI_API_KEY` select the adapter via `apps/ai_assistant/providers/factory.py::get_ai_provider()`; unset → `NullAIProvider` raises a clean 503 rather than crashing, so the Flutter dev can build the chat UI against a stable contract before the client supplies real credentials. Language (`en`/`ur`) is passed to the provider as a system-prompt instruction (`providers/prompts.py::build_system_prompt`), not a separate translation step — both providers handle Urdu output fine when explicitly instructed. Throttled at the `ai_assistant` scope (20/hour, configured back in Phase 0) since LLM calls cost money — applied to the whole viewset via a class-level `throttle_scope` attribute (see gotcha below). Uses **`google-genai`**, not the deprecated `google-generativeai` package — if you see the latter imported anywhere, that's a regression, not a valid alternative.
+
+**DRF `@action` gotcha hit in Phase 7**: two separately-named `@action`-decorated methods that happen to share the same `url_path` do **not** get merged into one route by the router — each becomes its own urlpattern with the identical path regex, and Django's resolver commits to the *first* one that matches the path, regardless of HTTP method, so the second one's method(s) 405 unreachably. To handle GET+POST at the same sub-resource URL (e.g. `sessions/{id}/messages/`), it must be **one** `@action(methods=["get", "post"], url_path="messages")` dispatching internally on `request.method` — see `ChatSessionViewSet.messages`. Same applies to any future sub-resource collection endpoint.
 
 ## Local dev setup
 
@@ -186,8 +196,8 @@ Shared fixtures live in the **root** `conftest.py` (not inside an app) so they'r
 4. ✅ Diet & Medicines — doctor-authored diet plans with one-active-per-patient history, medicine reminders + intake logging; 21 passing tests (75 total across the project). Also fixed a real bug found here: the shared `PatientOwnedModelSerializer.validate()` didn't distinguish create vs. update, so every doctor-side PATCH was wrongly 400ing — see the "Key modeling patterns" subtlety note above.
 5. ✅ Notifications infra — in-app inbox, pluggable FCM/WhatsApp adapters (null fallbacks confirmed working end-to-end without real credentials), 4 seeded Celery Beat jobs, wired into appointments/diet as real triggers, not left dangling; 21 passing tests (96 total)
 6. ✅ Hospitals proxy + Emergency SOS — Google Places Nearby Search proxy (Redis-cached by rounded lat/lng grid cell, 503 with a clear message on missing key or upstream failure, never a raw error), patient-initiated SOS with Celery-driven fan-out to assigned doctors + all admins + a direct WhatsApp message to the emergency contact (not a Notification row, since the contact isn't a system User); 18 passing tests (114 total)
-7. ⏳ **Next**: AI Assistant
-8. Reports + admin aggregate views
+7. ✅ AI Assistant — `ChatSession`/`ChatMessage`, OpenAI/Gemini adapters (`google-genai`, not the deprecated `google-generativeai`) with a `NullAIProvider` returning a clean 503 when unconfigured, patient-only access, 20/hour throttle scope already wired from Phase 0's settings; 8 passing tests (122 total)
+8. ⏳ **Next**: Reports + admin aggregate views
 9. Hardening pass (permission-matrix audit, rate-limit tuning, prod settings review, final Swagger pass)
 
 **When resuming work**: check the status table above, `git log` for what's actually committed, and continue from the first ⏳ phase. Update this file's status table and roadmap section as each phase completes — it is the persistent memory for this project across machines/sessions.
