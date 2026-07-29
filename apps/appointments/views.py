@@ -19,6 +19,7 @@ from apps.core.permissions import IsDoctorOrAdmin
     list=extend_schema(tags=["Appointments"]),
     retrieve=extend_schema(tags=["Appointments"]),
     create=extend_schema(tags=["Appointments"]),
+    partial_update=extend_schema(tags=["Appointments"]),
 )
 class AppointmentViewSet(viewsets.ModelViewSet):
     """

@@ -32,20 +32,47 @@ python manage.py createsuperuser
 
 - API docs (Swagger UI): http://127.0.0.1:8000/api/docs/
 - ReDoc: http://127.0.0.1:8000/api/redoc/
-- OpenAPI schema: http://127.0.0.1:8000/api/schema/
+- OpenAPI schema (live): http://127.0.0.1:8000/api/schema/
 - Django admin: http://127.0.0.1:8000/admin/
 - Health check: http://127.0.0.1:8000/healthz/
+
+To start background jobs (Celery worker + beat), also run in separate terminals:
+```bash
+celery -A config worker -l info
+celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+```
+
+## API handoff for the Flutter team
+
+The full API surface is documented via Swagger/OpenAPI (drf-spectacular), grouped into tags matching the app list below — that tag taxonomy is effectively the table of contents for integration. Besides the live Swagger UI, a versioned snapshot is committed at [`docs/openapi.yaml`](docs/openapi.yaml) so the contract can be browsed/diffed without running the server. Regenerate it after any endpoint change:
+```bash
+python manage.py spectacular --file docs/openapi.yaml
+```
 
 ## Running tests
 
 ```bash
 DJANGO_SETTINGS_MODULE=config.settings.test pytest
 ```
+130+ tests across every app, with role-boundary coverage (patient/doctor/admin access matrices) treated as non-negotiable for every clinical endpoint — see `CLAUDE.md` for the conventions this project follows.
 
 ## Project layout
 
 - `config/` — settings (`dev.py` / `prod.py` / `test.py`), root URLs, Celery app
-- `apps/` — one Django app per bounded context (`accounts`, `appointments`, `health`, `diet`, `medicines`, `notifications`, `hospitals`, `ai_assistant`, `reports`, `emergency`, `core`)
+- `apps/` — one Django app per bounded context:
+  - `core` — shared base mixins, RBAC permission classes, pagination, exception handling
+  - `accounts` — auth, roles, doctor provisioning
+  - `appointments` — booking + the doctor↔patient assignment table every clinical app relies on
+  - `health` — vitals, symptoms, water/kick trackers, pregnancy progress, baby-size reference
+  - `diet` / `medicines` — doctor-authored diet plans, patient medicine reminders
+  - `notifications` — in-app inbox, pluggable FCM/WhatsApp adapters, Celery Beat jobs
+  - `hospitals` — Google Places nearby-hospital proxy (Redis-cached)
+  - `ai_assistant` — AI pregnancy chat assistant (OpenAI/Gemini)
+  - `emergency` — SOS with Celery-driven fan-out
+  - `reports` — cross-app patient summary + admin system stats
 - `render.yaml` — Render deployment topology (web + Celery worker + Celery beat + managed Postgres/Redis)
+- `docs/openapi.yaml` — versioned API contract snapshot for frontend integration
 
 See `.env.example` for every configuration variable, including third-party integrations (AI provider, WhatsApp Business API, Firebase Cloud Messaging, Google Places) which are all optional at boot — the app runs end-to-end without them via null/no-op adapters, and real credentials can be dropped in later with zero code changes.
+
+See `CLAUDE.md` for the full architectural rationale, locked-in decisions, and per-phase build notes — it's written to let a fresh session (human or AI) pick this project up with full context.

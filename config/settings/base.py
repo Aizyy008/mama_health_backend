@@ -151,12 +151,20 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
     ),
     "DEFAULT_THROTTLE_CLASSES": (
+        # ScopedRateThrottle only acts on views that declare throttle_scope
+        # (auth, ai_assistant, hospitals — tighter, endpoint-specific limits).
+        # UserRateThrottle/AnonRateThrottle apply everywhere as a generous
+        # baseline safety net so no endpoint is completely unthrottled.
         "rest_framework.throttling.ScopedRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
     ),
     "DEFAULT_THROTTLE_RATES": {
         "auth": "20/hour",
         "ai_assistant": "20/hour",
         "hospitals": "60/hour",
+        "user": "2000/day",
+        "anon": "100/day",
     },
     "EXCEPTION_HANDLER": "apps.core.exceptions.custom_exception_handler",
     "TEST_REQUEST_DEFAULT_FORMAT": "json",

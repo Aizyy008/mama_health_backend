@@ -1,0 +1,4852 @@
+openapi: 3.0.3
+info:
+  title: Mama Health API
+  version: 1.0.0
+  description: REST API for the Mama Health pregnancy care platform. Serves the Patient,
+    Doctor, and Admin (Flutter Web) clients.
+paths:
+  /api/v1/auth/register/:
+    post:
+      operationId: auth_register_create
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Register'
+          description: ''
+  /api/v1/auth/verify-email/:
+    post:
+      operationId: auth_verify_email_create
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyEmail'
+          description: ''
+  /api/v1/auth/resend-verification/:
+    post:
+      operationId: auth_resend_verification_create
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResendVerification'
+          description: ''
+  /api/v1/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MamaHealthTokenObtainPairRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MamaHealthTokenObtainPairRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MamaHealthTokenObtainPairRequest'
+        required: true
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      description: |-
+        Takes a token and blacklists it. Must be used with the
+        `rest_framework_simplejwt.token_blacklist` app installed.
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenBlacklistRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenBlacklistRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenBlacklistRequest'
+        required: true
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/password/forgot/:
+    post:
+      operationId: auth_password_forgot_create
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordForgotRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordForgotRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordForgotRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordForgot'
+          description: ''
+  /api/v1/auth/password/reset/:
+    post:
+      operationId: auth_password_reset_create
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordReset'
+          description: ''
+  /api/v1/auth/password/change/:
+    post:
+      operationId: auth_password_change_create
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      tags:
+      - Auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+          description: ''
+  /api/v1/accounts/doctors/invite/:
+    post:
+      operationId: accounts_doctors_invite_create
+      tags:
+      - Accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorInviteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DoctorInviteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DoctorInviteRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorInvite'
+          description: ''
+  /api/v1/accounts/doctors/invite/accept/:
+    post:
+      operationId: accounts_doctors_invite_accept_create
+      tags:
+      - Accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorInviteAcceptRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DoctorInviteAcceptRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DoctorInviteAcceptRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorInviteAccept'
+          description: ''
+  /api/v1/accounts/patients/:
+    get:
+      operationId: accounts_patients_list
+      description: Admin sees all patients; a doctor sees only patients assigned to
+        them.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPatientListList'
+          description: ''
+  /api/v1/accounts/me/patient-profile/:
+    get:
+      operationId: accounts_me_patient_profile_retrieve
+      tags:
+      - Accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientProfile'
+          description: ''
+    put:
+      operationId: accounts_me_patient_profile_update
+      tags:
+      - Accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatientProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatientProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatientProfileRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientProfile'
+          description: ''
+    patch:
+      operationId: accounts_me_patient_profile_partial_update
+      tags:
+      - Accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPatientProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPatientProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPatientProfileRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientProfile'
+          description: ''
+  /api/v1/accounts/me/doctor-profile/:
+    get:
+      operationId: accounts_me_doctor_profile_retrieve
+      tags:
+      - Accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorProfile'
+          description: ''
+    put:
+      operationId: accounts_me_doctor_profile_update
+      tags:
+      - Accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DoctorProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DoctorProfileRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorProfile'
+          description: ''
+    patch:
+      operationId: accounts_me_doctor_profile_partial_update
+      tags:
+      - Accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDoctorProfileRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDoctorProfileRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDoctorProfileRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorProfile'
+          description: ''
+  /api/v1/accounts/doctors/:
+    get:
+      operationId: accounts_doctors_list
+      description: 'Read: any authenticated user (e.g. patients browsing doctors to
+        book with). Write: admin only.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDoctorListList'
+          description: ''
+  /api/v1/accounts/doctors/{id}/:
+    get:
+      operationId: accounts_doctors_retrieve
+      description: 'Read: any authenticated user (e.g. patients browsing doctors to
+        book with). Write: admin only.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - Accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorList'
+          description: ''
+    patch:
+      operationId: accounts_doctors_partial_update
+      description: 'Read: any authenticated user (e.g. patients browsing doctors to
+        book with). Write: admin only.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - Accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDoctorUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDoctorUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDoctorUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorUpdate'
+          description: ''
+  /api/v1/appointments/:
+    get:
+      operationId: appointments_list
+      description: |-
+        Scoping is bespoke (not PatientScopedQuerysetMixin): an appointment has
+        two distinct parties, so a doctor's view must be `doctor=request.user`,
+        not "any patient this doctor is assigned to" (which would leak other
+        doctors' appointments with a shared patient).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Appointments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAppointmentList'
+          description: ''
+    post:
+      operationId: appointments_create
+      description: |-
+        Scoping is bespoke (not PatientScopedQuerysetMixin): an appointment has
+        two distinct parties, so a doctor's view must be `doctor=request.user`,
+        not "any patient this doctor is assigned to" (which would leak other
+        doctors' appointments with a shared patient).
+      tags:
+      - Appointments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AppointmentRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AppointmentRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+  /api/v1/appointments/{id}/:
+    get:
+      operationId: appointments_retrieve
+      description: |-
+        Scoping is bespoke (not PatientScopedQuerysetMixin): an appointment has
+        two distinct parties, so a doctor's view must be `doctor=request.user`,
+        not "any patient this doctor is assigned to" (which would leak other
+        doctors' appointments with a shared patient).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this appointment.
+        required: true
+      tags:
+      - Appointments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+    patch:
+      operationId: appointments_partial_update
+      description: |-
+        Scoping is bespoke (not PatientScopedQuerysetMixin): an appointment has
+        two distinct parties, so a doctor's view must be `doctor=request.user`,
+        not "any patient this doctor is assigned to" (which would leak other
+        doctors' appointments with a shared patient).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this appointment.
+        required: true
+      tags:
+      - Appointments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAppointmentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAppointmentRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAppointmentRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+  /api/v1/appointments/{id}/doctor-notes/:
+    patch:
+      operationId: appointments_doctor_notes_partial_update
+      description: |-
+        Scoping is bespoke (not PatientScopedQuerysetMixin): an appointment has
+        two distinct parties, so a doctor's view must be `doctor=request.user`,
+        not "any patient this doctor is assigned to" (which would leak other
+        doctors' appointments with a shared patient).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this appointment.
+        required: true
+      tags:
+      - Appointments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAppointmentDoctorNotesRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAppointmentDoctorNotesRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAppointmentDoctorNotesRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+  /api/v1/appointments/{id}/status/:
+    post:
+      operationId: appointments_status_create
+      description: |-
+        Scoping is bespoke (not PatientScopedQuerysetMixin): an appointment has
+        two distinct parties, so a doctor's view must be `doctor=request.user`,
+        not "any patient this doctor is assigned to" (which would leak other
+        doctors' appointments with a shared patient).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this appointment.
+        required: true
+      tags:
+      - Appointments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentStatusUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AppointmentStatusUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AppointmentStatusUpdateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+  /api/v1/health/pregnancy-progress/:
+    get:
+      operationId: health_pregnancy_progress_retrieve
+      description: 'Patient: own progress. Doctor/Admin: ?patient_id=<id>, doctor
+        must be assigned.'
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PregnancyProgress'
+          description: ''
+  /api/v1/health/blood-pressure/:
+    get:
+      operationId: health_blood_pressure_list
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBloodPressureReadingList'
+          description: ''
+    post:
+      operationId: health_blood_pressure_create
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BloodPressureReadingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BloodPressureReadingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BloodPressureReadingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodPressureReading'
+          description: ''
+  /api/v1/health/blood-pressure/{id}/:
+    delete:
+      operationId: health_blood_pressure_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood pressure reading.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+    patch:
+      operationId: health_blood_pressure_partial_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood pressure reading.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodPressureReading'
+          description: ''
+    get:
+      operationId: health_blood_pressure_retrieve
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood pressure reading.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodPressureReading'
+          description: ''
+    put:
+      operationId: health_blood_pressure_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood pressure reading.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BloodPressureReadingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BloodPressureReadingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BloodPressureReadingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodPressureReading'
+          description: ''
+  /api/v1/health/blood-sugar/:
+    get:
+      operationId: health_blood_sugar_list
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBloodSugarReadingList'
+          description: ''
+    post:
+      operationId: health_blood_sugar_create
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BloodSugarReadingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BloodSugarReadingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BloodSugarReadingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodSugarReading'
+          description: ''
+  /api/v1/health/blood-sugar/{id}/:
+    delete:
+      operationId: health_blood_sugar_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood sugar reading.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+    patch:
+      operationId: health_blood_sugar_partial_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood sugar reading.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodSugarReadingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodSugarReadingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodSugarReadingRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodSugarReading'
+          description: ''
+    get:
+      operationId: health_blood_sugar_retrieve
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood sugar reading.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodSugarReading'
+          description: ''
+    put:
+      operationId: health_blood_sugar_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood sugar reading.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BloodSugarReadingRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BloodSugarReadingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BloodSugarReadingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodSugarReading'
+          description: ''
+  /api/v1/health/symptoms/:
+    get:
+      operationId: health_symptoms_list
+      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSymptomLogList'
+          description: ''
+    post:
+      operationId: health_symptoms_create
+      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SymptomLogRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SymptomLogRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SymptomLogRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymptomLog'
+          description: ''
+  /api/v1/health/symptoms/{id}/:
+    delete:
+      operationId: health_symptoms_destroy
+      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this symptom log.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+    patch:
+      operationId: health_symptoms_partial_update
+      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this symptom log.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSymptomLogRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSymptomLogRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSymptomLogRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymptomLog'
+          description: ''
+    get:
+      operationId: health_symptoms_retrieve
+      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this symptom log.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymptomLog'
+          description: ''
+    put:
+      operationId: health_symptoms_update
+      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this symptom log.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SymptomLogRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SymptomLogRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SymptomLogRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymptomLog'
+          description: ''
+  /api/v1/health/water-intake/:
+    get:
+      operationId: health_water_intake_list
+      description: No update/delete — water intake is an append-only log; 'today'
+        is a query-time filter, not a reset.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWaterIntakeEntryList'
+          description: ''
+    post:
+      operationId: health_water_intake_create
+      description: No update/delete — water intake is an append-only log; 'today'
+        is a query-time filter, not a reset.
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaterIntakeEntryRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WaterIntakeEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WaterIntakeEntryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaterIntakeEntry'
+          description: ''
+  /api/v1/health/water-intake/today/:
+    get:
+      operationId: health_water_intake_today_retrieve
+      description: No update/delete — water intake is an append-only log; 'today'
+        is a query-time filter, not a reset.
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaterIntakeEntry'
+          description: ''
+  /api/v1/health/water-intake/{id}/:
+    get:
+      operationId: health_water_intake_retrieve
+      description: No update/delete — water intake is an append-only log; 'today'
+        is a query-time filter, not a reset.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this water intake entry.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaterIntakeEntry'
+          description: ''
+  /api/v1/health/kick-sessions/:
+    get:
+      operationId: health_kick_sessions_list
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedKickCountSessionList'
+          description: ''
+    post:
+      operationId: health_kick_sessions_create
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KickCountSession'
+          description: ''
+  /api/v1/health/kick-sessions/{id}/:
+    get:
+      operationId: health_kick_sessions_retrieve
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this kick count session.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KickCountSession'
+          description: ''
+  /api/v1/health/kick-sessions/{id}/end/:
+    post:
+      operationId: health_kick_sessions_end_create
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this kick count session.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KickCountSession'
+          description: ''
+  /api/v1/health/kick-sessions/{id}/tap/:
+    post:
+      operationId: health_kick_sessions_tap_create
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this kick count session.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KickCountSession'
+          description: ''
+  /api/v1/health/baby-size/:
+    get:
+      operationId: health_baby_size_list
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BabySizeReference'
+          description: ''
+  /api/v1/health/baby-size/{week}/:
+    get:
+      operationId: health_baby_size_retrieve
+      parameters:
+      - in: path
+        name: week
+        schema:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BabySizeReference'
+          description: ''
+  /api/v1/diet/plans/:
+    get:
+      operationId: diet_plans_list
+      description: Doctor/admin authored; patient is read-only (never creates/edits
+        their own plan).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Diet
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDietPlanList'
+          description: ''
+    post:
+      operationId: diet_plans_create
+      description: Doctor/admin authored; patient is read-only (never creates/edits
+        their own plan).
+      tags:
+      - Diet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DietPlanRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DietPlanRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DietPlanRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DietPlan'
+          description: ''
+  /api/v1/diet/plans/active/:
+    get:
+      operationId: diet_plans_active_retrieve
+      description: Doctor/admin authored; patient is read-only (never creates/edits
+        their own plan).
+      tags:
+      - Diet
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DietPlan'
+          description: ''
+  /api/v1/diet/plans/{id}/:
+    delete:
+      operationId: diet_plans_destroy
+      description: Doctor/admin authored; patient is read-only (never creates/edits
+        their own plan).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this diet plan.
+        required: true
+      tags:
+      - Diet
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+    patch:
+      operationId: diet_plans_partial_update
+      description: Doctor/admin authored; patient is read-only (never creates/edits
+        their own plan).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this diet plan.
+        required: true
+      tags:
+      - Diet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDietPlanRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDietPlanRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDietPlanRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DietPlan'
+          description: ''
+    get:
+      operationId: diet_plans_retrieve
+      description: Doctor/admin authored; patient is read-only (never creates/edits
+        their own plan).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this diet plan.
+        required: true
+      tags:
+      - Diet
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DietPlan'
+          description: ''
+    put:
+      operationId: diet_plans_update
+      description: Doctor/admin authored; patient is read-only (never creates/edits
+        their own plan).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this diet plan.
+        required: true
+      tags:
+      - Diet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DietPlanRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DietPlanRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DietPlanRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DietPlan'
+          description: ''
+  /api/v1/medicines/reminders/:
+    get:
+      operationId: medicines_reminders_list
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Medicines
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMedicineReminderList'
+          description: ''
+    post:
+      operationId: medicines_reminders_create
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      tags:
+      - Medicines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicineReminderRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MedicineReminderRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MedicineReminderRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineReminder'
+          description: ''
+  /api/v1/medicines/reminders/{id}/:
+    delete:
+      operationId: medicines_reminders_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this medicine reminder.
+        required: true
+      tags:
+      - Medicines
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+    patch:
+      operationId: medicines_reminders_partial_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this medicine reminder.
+        required: true
+      tags:
+      - Medicines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineReminder'
+          description: ''
+    get:
+      operationId: medicines_reminders_retrieve
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this medicine reminder.
+        required: true
+      tags:
+      - Medicines
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineReminder'
+          description: ''
+    put:
+      operationId: medicines_reminders_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this medicine reminder.
+        required: true
+      tags:
+      - Medicines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicineReminderRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MedicineReminderRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MedicineReminderRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineReminder'
+          description: ''
+  /api/v1/medicines/reminders/{id}/log-intake/:
+    post:
+      operationId: medicines_reminders_log_intake_create
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this medicine reminder.
+        required: true
+      tags:
+      - Medicines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogIntakeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LogIntakeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LogIntakeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineReminder'
+          description: ''
+  /api/v1/medicines/intake-logs/:
+    get:
+      operationId: medicines_intake_logs_list
+      description: |-
+        No object-level permission class here (unlike other clinical viewsets):
+        IsOwnerPatientOrAssignedDoctorOrAdmin checks obj.patient_id directly,
+        but MedicineIntakeLog only has that indirectly via `reminder.patient` —
+        it would wrongly 403 even the rightful owner. get_queryset() scoping
+        (patient_field_name="reminder__patient") already fully protects both
+        list and retrieve for a read-only viewset, so it's not needed here.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Medicines
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMedicineIntakeLogList'
+          description: ''
+  /api/v1/medicines/intake-logs/{id}/:
+    get:
+      operationId: medicines_intake_logs_retrieve
+      description: |-
+        No object-level permission class here (unlike other clinical viewsets):
+        IsOwnerPatientOrAssignedDoctorOrAdmin checks obj.patient_id directly,
+        but MedicineIntakeLog only has that indirectly via `reminder.patient` —
+        it would wrongly 403 even the rightful owner. get_queryset() scoping
+        (patient_field_name="reminder__patient") already fully protects both
+        list and retrieve for a read-only viewset, so it's not needed here.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this medicine intake log.
+        required: true
+      tags:
+      - Medicines
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineIntakeLog'
+          description: ''
+  /api/v1/notifications/broadcast/:
+    post:
+      operationId: notifications_broadcast_create
+      tags:
+      - Notifications
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BroadcastRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BroadcastRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BroadcastRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Broadcast'
+          description: ''
+  /api/v1/notifications/send-to-patient/:
+    post:
+      operationId: notifications_send_to_patient_create
+      tags:
+      - Notifications
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorMessageRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DoctorMessageRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DoctorMessageRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorMessage'
+          description: ''
+  /api/v1/notifications/:
+    get:
+      operationId: notifications_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationList'
+          description: ''
+  /api/v1/notifications/mark-all-read/:
+    post:
+      operationId: notifications_mark_all_read_create
+      tags:
+      - Notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/v1/notifications/{id}/:
+    get:
+      operationId: notifications_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this notification.
+        required: true
+      tags:
+      - Notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/v1/notifications/{id}/mark-read/:
+    post:
+      operationId: notifications_mark_read_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this notification.
+        required: true
+      tags:
+      - Notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+          description: ''
+  /api/v1/hospitals/nearby/:
+    get:
+      operationId: hospitals_nearby_list
+      parameters:
+      - in: query
+        name: lat
+        schema:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+        required: true
+      - in: query
+        name: lng
+        schema:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: radius
+        schema:
+          type: integer
+          maximum: 50000
+          minimum: 100
+          default: 5000
+      tags:
+      - Hospitals
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedHospitalList'
+          description: ''
+  /api/v1/ai/sessions/:
+    get:
+      operationId: ai_sessions_list
+      description: Patient-only — the AI Pregnancy Assistant is a Patient App feature
+        only.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - AI Assistant
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedChatSessionList'
+          description: ''
+    post:
+      operationId: ai_sessions_create
+      description: Patient-only — the AI Pregnancy Assistant is a Patient App feature
+        only.
+      tags:
+      - AI Assistant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatSessionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChatSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChatSessionRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+          description: ''
+  /api/v1/ai/sessions/{id}/:
+    get:
+      operationId: ai_sessions_retrieve
+      description: Patient-only — the AI Pregnancy Assistant is a Patient App feature
+        only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chat session.
+        required: true
+      tags:
+      - AI Assistant
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+          description: ''
+  /api/v1/ai/sessions/{id}/messages/:
+    get:
+      operationId: ai_sessions_messages_retrieve
+      description: Patient-only — the AI Pregnancy Assistant is a Patient App feature
+        only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chat session.
+        required: true
+      tags:
+      - AI Assistant
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+          description: ''
+    post:
+      operationId: ai_sessions_messages_create
+      description: Patient-only — the AI Pregnancy Assistant is a Patient App feature
+        only.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this chat session.
+        required: true
+      tags:
+      - AI Assistant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+          description: ''
+  /api/v1/reports/patient-summary/:
+    get:
+      operationId: reports_patient_summary_retrieve
+      description: 'Patient: own summary. Doctor/Admin: ?patient_id=, assignment-checked
+        for doctors.'
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientSummaryReport'
+          description: ''
+  /api/v1/reports/admin/stats/:
+    get:
+      operationId: reports_admin_stats_retrieve
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStats'
+          description: ''
+  /api/v1/emergency/sos/:
+    get:
+      operationId: emergency_sos_list
+      description: |-
+        SOS is inherently patient-initiated — unlike other clinical models, a
+        doctor/admin can never trigger one 'on behalf of' a patient, only read
+        and resolve them.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Emergency
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEmergencySOSEventList'
+          description: ''
+    post:
+      operationId: emergency_sos_create
+      description: |-
+        SOS is inherently patient-initiated — unlike other clinical models, a
+        doctor/admin can never trigger one 'on behalf of' a patient, only read
+        and resolve them.
+      tags:
+      - Emergency
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmergencySOSEventRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmergencySOSEventRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmergencySOSEventRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmergencySOSEvent'
+          description: ''
+  /api/v1/emergency/sos/{id}/:
+    get:
+      operationId: emergency_sos_retrieve
+      description: |-
+        SOS is inherently patient-initiated — unlike other clinical models, a
+        doctor/admin can never trigger one 'on behalf of' a patient, only read
+        and resolve them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this emergency sos event.
+        required: true
+      tags:
+      - Emergency
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmergencySOSEvent'
+          description: ''
+  /api/v1/emergency/sos/{id}/resolve/:
+    post:
+      operationId: emergency_sos_resolve_create
+      description: |-
+        SOS is inherently patient-initiated — unlike other clinical models, a
+        doctor/admin can never trigger one 'on behalf of' a patient, only read
+        and resolve them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this emergency sos event.
+        required: true
+      tags:
+      - Emergency
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveSOSRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ResolveSOSRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ResolveSOSRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmergencySOSEvent'
+          description: ''
+components:
+  schemas:
+    AdminStats:
+      type: object
+      properties:
+        total_patients:
+          type: integer
+        total_doctors:
+          type: integer
+        total_appointments:
+          type: integer
+        appointments_this_month:
+          type: integer
+        active_sos_events:
+          type: integer
+        new_patients_this_week:
+          type: integer
+      required:
+      - active_sos_events
+      - appointments_this_month
+      - new_patients_this_week
+      - total_appointments
+      - total_doctors
+      - total_patients
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        doctor:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        appointment_type:
+          $ref: '#/components/schemas/AppointmentTypeEnum'
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AppointmentStatusEnum'
+          readOnly: true
+        meeting_link:
+          type: string
+          format: uri
+          readOnly: true
+        reason:
+          type: string
+        doctor_notes:
+          type: string
+        cancellation_reason:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - cancellation_reason
+      - created_at
+      - doctor
+      - id
+      - meeting_link
+      - patient
+      - scheduled_at
+      - status
+      - updated_at
+    AppointmentRequest:
+      type: object
+      properties:
+        doctor_id:
+          type: integer
+          writeOnly: true
+        patient_id:
+          type: integer
+          writeOnly: true
+        appointment_type:
+          $ref: '#/components/schemas/AppointmentTypeEnum'
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        reason:
+          type: string
+        doctor_notes:
+          type: string
+      required:
+      - doctor_id
+      - scheduled_at
+    AppointmentStatusEnum:
+      enum:
+      - pending
+      - confirmed
+      - completed
+      - cancelled
+      - no_show
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `confirmed` - Confirmed
+        * `completed` - Completed
+        * `cancelled` - Cancelled
+        * `no_show` - No show
+    AppointmentStatusUpdateRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/AppointmentStatusEnum'
+        cancellation_reason:
+          type: string
+          default: ''
+      required:
+      - status
+    AppointmentTypeEnum:
+      enum:
+      - in_person
+      - video_consultation
+      type: string
+      description: |-
+        * `in_person` - In person
+        * `video_consultation` - Video consultation
+    BabySizeReference:
+      type: object
+      properties:
+        week:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        size_comparison:
+          type: string
+          maxLength: 100
+        length_cm:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          nullable: true
+        weight_grams:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,5}(?:\.\d{0,1})?$
+          nullable: true
+        description:
+          type: string
+      required:
+      - size_comparison
+      - week
+    BloodPressureReading:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        systolic:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        diastolic:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        pulse:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+        recorded_at:
+          type: string
+          format: date-time
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - diastolic
+      - id
+      - patient
+      - systolic
+    BloodPressureReadingRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        systolic:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        diastolic:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        pulse:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+        recorded_at:
+          type: string
+          format: date-time
+        notes:
+          type: string
+      required:
+      - diastolic
+      - systolic
+    BloodSugarReading:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        value_mg_dl:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        reading_context:
+          $ref: '#/components/schemas/ReadingContextEnum'
+        recorded_at:
+          type: string
+          format: date-time
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - patient
+      - value_mg_dl
+    BloodSugarReadingRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        value_mg_dl:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        reading_context:
+          $ref: '#/components/schemas/ReadingContextEnum'
+        recorded_at:
+          type: string
+          format: date-time
+        notes:
+          type: string
+      required:
+      - value_mg_dl
+    BriefUser:
+      type: object
+      description: |-
+        Minimal user representation for nesting inside other apps' serializers
+        (e.g. an Appointment's patient/doctor, a DietPlan's created_by).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+      required:
+      - email
+      - id
+    BriefUserRequest:
+      type: object
+      description: |-
+        Minimal user representation for nesting inside other apps' serializers
+        (e.g. an Appointment's patient/doctor, a DietPlan's created_by).
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+      required:
+      - email
+    Broadcast:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        body:
+          type: string
+        target_role:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/TargetRoleEnum'
+          - $ref: '#/components/schemas/NullEnum'
+      required:
+      - body
+      - title
+    BroadcastRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: string
+          minLength: 1
+        target_role:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/TargetRoleEnum'
+          - $ref: '#/components/schemas/NullEnum'
+      required:
+      - body
+      - title
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/ChatMessageRoleEnum'
+          readOnly: true
+        content:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - content
+      - created_at
+      - id
+      - role
+    ChatMessageRoleEnum:
+      enum:
+      - user
+      - assistant
+      type: string
+      description: |-
+        * `user` - User
+        * `assistant` - Assistant
+    ChatSession:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        language:
+          $ref: '#/components/schemas/LanguageEnum'
+        title:
+          type: string
+          maxLength: 150
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+    ChatSessionRequest:
+      type: object
+      properties:
+        language:
+          $ref: '#/components/schemas/LanguageEnum'
+        title:
+          type: string
+          maxLength: 150
+    DietPlan:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        created_by:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        is_active:
+          type: boolean
+          readOnly: true
+        hydration_recommendation_ml:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        notes:
+          type: string
+        meals:
+          type: array
+          items:
+            $ref: '#/components/schemas/DietPlanMeal'
+        foods_to_avoid:
+          type: array
+          items:
+            $ref: '#/components/schemas/FoodAvoidanceItem'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - created_by
+      - id
+      - is_active
+      - patient
+      - updated_at
+    DietPlanMeal:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        meal_type:
+          $ref: '#/components/schemas/MealTypeEnum'
+        description:
+          type: string
+      required:
+      - description
+      - id
+      - meal_type
+    DietPlanMealRequest:
+      type: object
+      properties:
+        meal_type:
+          $ref: '#/components/schemas/MealTypeEnum'
+        description:
+          type: string
+          minLength: 1
+      required:
+      - description
+      - meal_type
+    DietPlanRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        hydration_recommendation_ml:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        notes:
+          type: string
+        meals:
+          type: array
+          items:
+            $ref: '#/components/schemas/DietPlanMealRequest'
+        foods_to_avoid:
+          type: array
+          items:
+            $ref: '#/components/schemas/FoodAvoidanceItemRequest'
+    DoctorInvite:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        specialization:
+          type: string
+          default: ''
+      required:
+      - email
+    DoctorInviteAccept:
+      type: object
+      properties:
+        token:
+          type: string
+        first_name:
+          type: string
+          default: ''
+        last_name:
+          type: string
+          default: ''
+        phone_number:
+          type: string
+          default: ''
+      required:
+      - token
+    DoctorInviteAcceptRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        first_name:
+          type: string
+          default: ''
+        last_name:
+          type: string
+          default: ''
+        phone_number:
+          type: string
+          default: ''
+      required:
+      - password
+      - token
+    DoctorInviteRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        specialization:
+          type: string
+          default: ''
+      required:
+      - email
+    DoctorList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone_number:
+          type: string
+          maxLength: 20
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        date_joined:
+          type: string
+          format: date-time
+        doctor_profile:
+          allOf:
+          - $ref: '#/components/schemas/DoctorProfile'
+          readOnly: true
+      required:
+      - doctor_profile
+      - email
+      - id
+    DoctorMessage:
+      type: object
+      properties:
+        patient_id:
+          type: integer
+        title:
+          type: string
+          maxLength: 200
+        body:
+          type: string
+      required:
+      - body
+      - patient_id
+      - title
+    DoctorMessageRequest:
+      type: object
+      properties:
+        patient_id:
+          type: integer
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: string
+          minLength: 1
+      required:
+      - body
+      - patient_id
+      - title
+    DoctorProfile:
+      type: object
+      properties:
+        specialization:
+          type: string
+          maxLength: 150
+        license_number:
+          type: string
+          maxLength: 100
+        years_of_experience:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        bio:
+          type: string
+        is_accepting_patients:
+          type: boolean
+    DoctorProfileRequest:
+      type: object
+      properties:
+        specialization:
+          type: string
+          maxLength: 150
+        license_number:
+          type: string
+          maxLength: 100
+        years_of_experience:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        bio:
+          type: string
+        is_accepting_patients:
+          type: boolean
+    DoctorUpdate:
+      type: object
+      properties:
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone_number:
+          type: string
+          maxLength: 20
+        doctor_profile:
+          $ref: '#/components/schemas/DoctorProfile'
+    EmergencySOSEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/EmergencySOSStatusEnum'
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - patient
+      - resolved_at
+      - status
+    EmergencySOSEventRequest:
+      type: object
+      properties:
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        notes:
+          type: string
+    EmergencySOSStatusEnum:
+      enum:
+      - active
+      - resolved
+      - false_alarm
+      type: string
+      description: |-
+        * `active` - Active
+        * `resolved` - Resolved
+        * `false_alarm` - False alarm
+    FoodAvoidanceItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        food_name:
+          type: string
+          maxLength: 150
+        reason:
+          type: string
+      required:
+      - food_name
+      - id
+    FoodAvoidanceItemRequest:
+      type: object
+      properties:
+        food_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        reason:
+          type: string
+      required:
+      - food_name
+    Hospital:
+      type: object
+      properties:
+        place_id:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+          nullable: true
+        longitude:
+          type: number
+          format: double
+          nullable: true
+        rating:
+          type: number
+          format: double
+          nullable: true
+        is_open_now:
+          type: boolean
+          nullable: true
+      required:
+      - address
+      - latitude
+      - longitude
+      - name
+      - place_id
+    KickCountSession:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        kick_count:
+          type: integer
+          readOnly: true
+        log_date:
+          type: string
+          format: date
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/KickEvent'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - ended_at
+      - events
+      - id
+      - kick_count
+      - patient
+    KickCountSessionRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        started_at:
+          type: string
+          format: date-time
+        log_date:
+          type: string
+          format: date
+    KickEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        tapped_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - tapped_at
+    LanguageEnum:
+      enum:
+      - en
+      - ur
+      type: string
+      description: |-
+        * `en` - English
+        * `ur` - Urdu
+    LogIntakeRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/LogIntakeStatusEnum'
+        scheduled_for:
+          type: string
+          format: date-time
+      required:
+      - status
+    LogIntakeStatusEnum:
+      enum:
+      - taken
+      - skipped
+      type: string
+      description: |-
+        * `taken` - taken
+        * `skipped` - skipped
+    MamaHealthTokenObtainPairRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+    Me:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/MeRoleEnum'
+          readOnly: true
+        first_name:
+          type: string
+          readOnly: true
+        last_name:
+          type: string
+          readOnly: true
+        phone_number:
+          type: string
+          readOnly: true
+        is_email_verified:
+          type: boolean
+          readOnly: true
+        date_joined:
+          type: string
+          format: date-time
+          readOnly: true
+        patient_profile:
+          allOf:
+          - $ref: '#/components/schemas/PatientProfile'
+          readOnly: true
+        doctor_profile:
+          allOf:
+          - $ref: '#/components/schemas/DoctorProfile'
+          readOnly: true
+      required:
+      - date_joined
+      - doctor_profile
+      - email
+      - first_name
+      - id
+      - is_email_verified
+      - last_name
+      - patient_profile
+      - phone_number
+      - role
+    MeRoleEnum:
+      enum:
+      - patient
+      - doctor
+      - admin
+      type: string
+      description: |-
+        * `patient` - Patient
+        * `doctor` - Doctor
+        * `admin` - Admin
+    MealTypeEnum:
+      enum:
+      - breakfast
+      - lunch
+      - dinner
+      - snack
+      type: string
+      description: |-
+        * `breakfast` - Breakfast
+        * `lunch` - Lunch
+        * `dinner` - Dinner
+        * `snack` - Snack
+    MedicineAdherence:
+      type: object
+      properties:
+        taken:
+          type: integer
+        skipped:
+          type: integer
+        pending:
+          type: integer
+      required:
+      - pending
+      - skipped
+      - taken
+    MedicineIntakeLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        reminder:
+          type: integer
+          readOnly: true
+        scheduled_for:
+          type: string
+          format: date-time
+          readOnly: true
+        taken_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/MedicineIntakeStatusEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - reminder
+      - scheduled_for
+      - status
+      - taken_at
+    MedicineIntakeStatusEnum:
+      enum:
+      - pending
+      - taken
+      - skipped
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `taken` - Taken
+        * `skipped` - Skipped
+    MedicineReminder:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        medicine_name:
+          type: string
+          maxLength: 150
+        dosage:
+          type: string
+          maxLength: 100
+        times_per_day:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        reminder_times:
+          description: e.g. ["08:00", "20:00"]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - medicine_name
+      - patient
+      - updated_at
+    MedicineReminderRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        medicine_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        dosage:
+          type: string
+          maxLength: 100
+        times_per_day:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        reminder_times:
+          description: e.g. ["08:00", "20:00"]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        is_active:
+          type: boolean
+      required:
+      - medicine_name
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        notification_type:
+          allOf:
+          - $ref: '#/components/schemas/NotificationTypeEnum'
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        body:
+          type: string
+          readOnly: true
+        data:
+          readOnly: true
+        is_read:
+          type: boolean
+          readOnly: true
+        channel_push_sent:
+          type: boolean
+          readOnly: true
+        channel_whatsapp_sent:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - body
+      - channel_push_sent
+      - channel_whatsapp_sent
+      - created_at
+      - data
+      - id
+      - is_read
+      - notification_type
+      - title
+    NotificationTypeEnum:
+      enum:
+      - appointment
+      - medicine
+      - diet
+      - doctor_message
+      - weekly_update
+      - emergency
+      - broadcast
+      type: string
+      description: |-
+        * `appointment` - Appointment
+        * `medicine` - Medicine
+        * `diet` - Diet
+        * `doctor_message` - Doctor message
+        * `weekly_update` - Weekly update
+        * `emergency` - Emergency
+        * `broadcast` - Broadcast
+    NullEnum:
+      enum:
+      - null
+    PaginatedAppointmentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Appointment'
+    PaginatedBloodPressureReadingList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BloodPressureReading'
+    PaginatedBloodSugarReadingList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BloodSugarReading'
+    PaginatedChatSessionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatSession'
+    PaginatedDietPlanList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DietPlan'
+    PaginatedDoctorListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DoctorList'
+    PaginatedEmergencySOSEventList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmergencySOSEvent'
+    PaginatedHospitalList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Hospital'
+    PaginatedKickCountSessionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/KickCountSession'
+    PaginatedMedicineIntakeLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineIntakeLog'
+    PaginatedMedicineReminderList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineReminder'
+    PaginatedNotificationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+    PaginatedPatientListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatientList'
+    PaginatedSymptomLogList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymptomLog'
+    PaginatedWaterIntakeEntryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WaterIntakeEntry'
+    PasswordChangeRequest:
+      type: object
+      properties:
+        old_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - new_password
+      - old_password
+    PasswordForgot:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+      - email
+    PasswordForgotRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+      required:
+      - email
+    PasswordReset:
+      type: object
+      properties:
+        token:
+          type: string
+      required:
+      - token
+    PasswordResetRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - new_password
+      - token
+    PatchedAppointmentDoctorNotesRequest:
+      type: object
+      properties:
+        doctor_notes:
+          type: string
+    PatchedAppointmentRequest:
+      type: object
+      properties:
+        doctor_id:
+          type: integer
+          writeOnly: true
+        patient_id:
+          type: integer
+          writeOnly: true
+        appointment_type:
+          $ref: '#/components/schemas/AppointmentTypeEnum'
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        reason:
+          type: string
+        doctor_notes:
+          type: string
+    PatchedBloodPressureReadingRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        systolic:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        diastolic:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        pulse:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+        recorded_at:
+          type: string
+          format: date-time
+        notes:
+          type: string
+    PatchedBloodSugarReadingRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        value_mg_dl:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        reading_context:
+          $ref: '#/components/schemas/ReadingContextEnum'
+        recorded_at:
+          type: string
+          format: date-time
+        notes:
+          type: string
+    PatchedDietPlanRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        hydration_recommendation_ml:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        notes:
+          type: string
+        meals:
+          type: array
+          items:
+            $ref: '#/components/schemas/DietPlanMealRequest'
+        foods_to_avoid:
+          type: array
+          items:
+            $ref: '#/components/schemas/FoodAvoidanceItemRequest'
+    PatchedDoctorProfileRequest:
+      type: object
+      properties:
+        specialization:
+          type: string
+          maxLength: 150
+        license_number:
+          type: string
+          maxLength: 100
+        years_of_experience:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        bio:
+          type: string
+        is_accepting_patients:
+          type: boolean
+    PatchedDoctorUpdateRequest:
+      type: object
+      properties:
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone_number:
+          type: string
+          maxLength: 20
+        doctor_profile:
+          $ref: '#/components/schemas/DoctorProfileRequest'
+    PatchedMedicineReminderRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        medicine_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        dosage:
+          type: string
+          maxLength: 100
+        times_per_day:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        reminder_times:
+          description: e.g. ["08:00", "20:00"]
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        is_active:
+          type: boolean
+    PatchedPatientProfileRequest:
+      type: object
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+        lmp_date:
+          type: string
+          format: date
+          nullable: true
+          description: Last Menstrual Period date
+        edd_date:
+          type: string
+          format: date
+          nullable: true
+          description: Estimated Due Date; auto-derived from lmp_date if not set
+        blood_group:
+          type: string
+          maxLength: 5
+        emergency_contact_name:
+          type: string
+          maxLength: 100
+        emergency_contact_phone:
+          type: string
+          maxLength: 20
+        address:
+          type: string
+    PatchedSymptomLogRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        log_date:
+          type: string
+          format: date
+        symptom_ids:
+          type: array
+          items:
+            type: integer
+        notes:
+          type: string
+    PatientList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone_number:
+          type: string
+          maxLength: 20
+        date_joined:
+          type: string
+          format: date-time
+        patient_profile:
+          allOf:
+          - $ref: '#/components/schemas/PatientProfile'
+          readOnly: true
+      required:
+      - email
+      - id
+      - patient_profile
+    PatientProfile:
+      type: object
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+        lmp_date:
+          type: string
+          format: date
+          nullable: true
+          description: Last Menstrual Period date
+        edd_date:
+          type: string
+          format: date
+          nullable: true
+          description: Estimated Due Date; auto-derived from lmp_date if not set
+        blood_group:
+          type: string
+          maxLength: 5
+        emergency_contact_name:
+          type: string
+          maxLength: 100
+        emergency_contact_phone:
+          type: string
+          maxLength: 20
+        address:
+          type: string
+        profile_complete:
+          type: boolean
+          readOnly: true
+      required:
+      - profile_complete
+    PatientProfileRequest:
+      type: object
+      properties:
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+        lmp_date:
+          type: string
+          format: date
+          nullable: true
+          description: Last Menstrual Period date
+        edd_date:
+          type: string
+          format: date
+          nullable: true
+          description: Estimated Due Date; auto-derived from lmp_date if not set
+        blood_group:
+          type: string
+          maxLength: 5
+        emergency_contact_name:
+          type: string
+          maxLength: 100
+        emergency_contact_phone:
+          type: string
+          maxLength: 20
+        address:
+          type: string
+    PatientSummaryReport:
+      type: object
+      properties:
+        pregnancy_progress:
+          allOf:
+          - $ref: '#/components/schemas/PregnancyProgress'
+          nullable: true
+        latest_blood_pressure:
+          allOf:
+          - $ref: '#/components/schemas/BloodPressureReading'
+          nullable: true
+        latest_blood_sugar:
+          allOf:
+          - $ref: '#/components/schemas/BloodSugarReading'
+          nullable: true
+        active_diet_plan:
+          allOf:
+          - $ref: '#/components/schemas/DietPlan'
+          nullable: true
+        upcoming_appointments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Appointment'
+        recent_symptoms:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymptomLog'
+        medicine_adherence:
+          $ref: '#/components/schemas/MedicineAdherence'
+      required:
+      - active_diet_plan
+      - latest_blood_pressure
+      - latest_blood_sugar
+      - medicine_adherence
+      - pregnancy_progress
+      - recent_symptoms
+      - upcoming_appointments
+    PregnancyProgress:
+      type: object
+      properties:
+        lmp_date:
+          type: string
+          format: date
+        edd_date:
+          type: string
+          format: date
+        current_week:
+          type: integer
+        current_day:
+          type: integer
+        percent_complete:
+          type: number
+          format: double
+        trimester:
+          type: integer
+        days_remaining:
+          type: integer
+      required:
+      - current_day
+      - current_week
+      - days_remaining
+      - edd_date
+      - lmp_date
+      - percent_complete
+      - trimester
+    ReadingContextEnum:
+      enum:
+      - fasting
+      - post_meal
+      - random
+      type: string
+      description: |-
+        * `fasting` - Fasting
+        * `post_meal` - Post-meal
+        * `random` - Random
+    Register:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+          default: ''
+        last_name:
+          type: string
+          default: ''
+        phone_number:
+          type: string
+          default: ''
+      required:
+      - email
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+        first_name:
+          type: string
+          default: ''
+        last_name:
+          type: string
+          default: ''
+        phone_number:
+          type: string
+          default: ''
+      required:
+      - email
+      - password
+    ResendVerification:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+      - email
+    ResendVerificationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+      required:
+      - email
+    ResolveSOSRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/ResolveSOSStatusEnum'
+      required:
+      - status
+    ResolveSOSStatusEnum:
+      enum:
+      - resolved
+      - false_alarm
+      type: string
+      description: |-
+        * `resolved` - resolved
+        * `false_alarm` - false_alarm
+    SendMessageRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+      required:
+      - content
+    SymptomLog:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        log_date:
+          type: string
+          format: date
+        symptoms:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymptomType'
+          readOnly: true
+        symptom_ids:
+          type: array
+          items:
+            type: integer
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - patient
+      - symptoms
+      - updated_at
+    SymptomLogRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        log_date:
+          type: string
+          format: date
+        symptom_ids:
+          type: array
+          items:
+            type: integer
+        notes:
+          type: string
+    SymptomType:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+      required:
+      - id
+      - name
+    SymptomTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+      required:
+      - name
+    TargetRoleEnum:
+      enum:
+      - patient
+      - doctor
+      type: string
+      description: |-
+        * `patient` - patient
+        * `doctor` - doctor
+    TokenBlacklistRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - refresh
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    VerifyEmail:
+      type: object
+      properties:
+        token:
+          type: string
+      required:
+      - token
+    VerifyEmailRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+      required:
+      - token
+    WaterIntakeEntry:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient:
+          allOf:
+          - $ref: '#/components/schemas/BriefUser'
+          readOnly: true
+        amount_ml:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        logged_at:
+          type: string
+          format: date-time
+          readOnly: true
+        log_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount_ml
+      - created_at
+      - id
+      - logged_at
+      - patient
+    WaterIntakeEntryRequest:
+      type: object
+      description: |-
+        Base for any model with a `patient` FK, owned by a specific patient but
+        writable by an assigned doctor/admin on the patient's behalf. Adds a
+        read-only nested `patient` and a write-only `patient_id`, and requires
+        patient_id whenever the actor isn't the patient themselves. Pairs with
+        core.viewsets.PatientScopedQuerysetMixin / PatientOwnedCreateMixin.
+      properties:
+        patient_id:
+          type: integer
+          writeOnly: true
+        amount_ml:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        log_date:
+          type: string
+          format: date
+      required:
+      - amount_ml
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+tags:
+- name: Auth
+  description: Registration, login, email verification, password reset.
+- name: Accounts
+  description: User profiles and doctor provisioning (admin-managed).
+- name: Appointments
+  description: Appointment booking and doctor-patient assignment.
+- name: Health
+  description: Vitals, health tracker, pregnancy progress.
+- name: Diet
+  description: Doctor-authored diet plans.
+- name: Medicines
+  description: Medicine reminders and intake logs.
+- name: Notifications
+  description: In-app notifications and admin broadcasts.
+- name: Hospitals
+  description: Nearby hospital search (Google Places proxy).
+- name: AI Assistant
+  description: AI pregnancy assistant chat.
+- name: Reports
+  description: Aggregated reports and admin system statistics.
+- name: Emergency
+  description: Emergency SOS.
