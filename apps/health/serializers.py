@@ -5,8 +5,10 @@ from apps.health.models import (
     BabySizeReference,
     BloodPressureReading,
     BloodSugarReading,
+    ExerciseVideo,
     KickCountSession,
     KickEvent,
+    SurgicalProcedureRecord,
     SymptomLog,
     SymptomType,
     WaterIntakeEntry,
@@ -128,6 +130,29 @@ class BabySizeReferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = BabySizeReference
         fields = ["week", "size_comparison", "length_cm", "weight_grams", "description"]
+
+
+class SurgicalProcedureRecordSerializer(PatientOwnedModelSerializer):
+    class Meta:
+        model = SurgicalProcedureRecord
+        fields = [
+            "id",
+            "patient",
+            "patient_id",
+            "procedure_name",
+            "procedure_date",
+            "hospital_name",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
+class ExerciseVideoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExerciseVideo
+        fields = ["id", "title", "description", "category", "video_url", "duration_minutes", "trimester"]
 
 
 class PregnancyProgressSerializer(serializers.Serializer):

@@ -9,13 +9,25 @@ from apps.core.permissions import IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatie
 from apps.core.utils import resolve_patient_from_request
 from apps.core.viewsets import PatientOwnedCreateMixin, PatientScopedQuerysetMixin
 from apps.health import services
-from apps.health.models import BabySizeReference, BloodPressureReading, BloodSugarReading, KickCountSession, KickEvent, SymptomLog, WaterIntakeEntry
+from apps.health.models import (
+    BabySizeReference,
+    BloodPressureReading,
+    BloodSugarReading,
+    ExerciseVideo,
+    KickCountSession,
+    KickEvent,
+    SurgicalProcedureRecord,
+    SymptomLog,
+    WaterIntakeEntry,
+)
 from apps.health.serializers import (
     BabySizeReferenceSerializer,
     BloodPressureReadingSerializer,
     BloodSugarReadingSerializer,
+    ExerciseVideoSerializer,
     KickCountSessionSerializer,
     PregnancyProgressSerializer,
+    SurgicalProcedureRecordSerializer,
     SymptomLogSerializer,
     WaterIntakeEntrySerializer,
 )
@@ -155,3 +167,31 @@ class PregnancyProgressView(generics.GenericAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(self.get_serializer(data).data)
+
+
+@extend_schema_view(
+    list=extend_schema(tags=[TAG]),
+    retrieve=extend_schema(tags=[TAG]),
+    create=extend_schema(tags=[TAG]),
+    update=extend_schema(tags=[TAG]),
+    partial_update=extend_schema(tags=[TAG]),
+    destroy=extend_schema(tags=[TAG]),
+)
+class SurgicalProcedureRecordViewSet(
+    PatientScopedQuerysetMixin, PatientOwnedCreateMixin, viewsets.ModelViewSet
+):
+    serializer_class = SurgicalProcedureRecordSerializer
+    queryset = SurgicalProcedureRecord.objects.select_related("patient")
+    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin]
+
+
+@extend_schema_view(
+    list=extend_schema(tags=[TAG]),
+    retrieve=extend_schema(tags=[TAG]),
+)
+class ExerciseVideoViewSet(viewsets.ReadOnlyModelViewSet):
+    """Admin-managed via Django admin (like BabySizeReference) — no write API."""
+
+    serializer_class = ExerciseVideoSerializer
+    queryset = ExerciseVideo.objects.all()
+    permission_classes = [permissions.IsAuthenticated]

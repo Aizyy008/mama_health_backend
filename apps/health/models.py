@@ -93,3 +93,41 @@ class BabySizeReference(models.Model):
 
     def __str__(self):
         return f"Week {self.week}: {self.size_comparison}"
+
+
+class SurgicalProcedureRecord(TimeStampedModel):
+    """Patient-owned, self-logged record of past/scheduled procedures
+    (e.g. C-section, cerclage) — same access pattern as BP/blood sugar."""
+
+    patient = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="surgical_procedures"
+    )
+    procedure_name = models.CharField(max_length=200)
+    procedure_date = models.DateField()
+    hospital_name = models.CharField(max_length=200, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-procedure_date"]
+
+
+class ExerciseVideo(models.Model):
+    """Admin-managed reference table of external video links (YouTube/Vimeo/
+    etc.) — no video files are hosted by this project (no media storage)."""
+
+    class Category(models.TextChoices):
+        EXERCISE = "exercise", "Exercise"
+        BREATHING = "breathing", "Breathing"
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    category = models.CharField(max_length=20, choices=Category.choices)
+    video_url = models.URLField()
+    duration_minutes = models.PositiveIntegerField(null=True, blank=True)
+    trimester = models.PositiveSmallIntegerField(null=True, blank=True, help_text="1, 2, or 3 — optional")
+
+    class Meta:
+        ordering = ["category", "title"]
+
+    def __str__(self):
+        return self.title

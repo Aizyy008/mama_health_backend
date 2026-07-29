@@ -7,7 +7,7 @@ from rest_framework import status
 
 from apps.accounts.tests.factories import DoctorUserFactory, PatientUserFactory
 from apps.appointments.models import PatientDoctorAssignment
-from apps.health.models import BabySizeReference, KickCountSession, SymptomType
+from apps.health.models import BabySizeReference, ExerciseVideo, KickCountSession, SurgicalProcedureRecord, SymptomType
 from apps.health.tests.factories import (
     BloodPressureReadingFactory,
     BloodSugarReadingFactory,
@@ -202,3 +202,68 @@ class TestPregnancyProgress:
         resp = doctor_client.get(reverse("pregnancy-progress"), {"patient_id": patient.id})
         assert resp.status_code == status.HTTP_200_OK
         assert resp.data["current_week"] == 10
+
+
+class TestSurgicalProcedureRecords:
+    def test_patient_logs_own_procedure(self, patient_client, patient_user):
+        resp = patient_client.post(
+            reverse("surgical-procedure-list"),
+            {"procedure_name": "C-Section", "procedure_date": "2024-03-10", "hospital_name": "City Hospital"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert resp.data["patient"]["id"] == patient_user.id
+
+    def test_patient_cannot_see_another_patients_records(self, patient_client, patient_user):
+        SurgicalProcedureRecord.objects.create(
+            patient=patient_user, procedure_name="Cerclage", procedure_date=date.today()
+        )
+        SurgicalProcedureRecord.objects.create(
+            patient=PatientUserFactory(), procedure_name="C-Section", procedure_date=date.today()
+        )
+        resp = patient_client.get(reverse("surgical-procedure-list"))
+        assert resp.data["count"] == 1
+
+    def test_unassigned_doctor_cannot_create_for_a_patient(self, doctor_client):
+        patient = PatientUserFactory()
+        resp = doctor_client.post(
+            reverse("surgical-procedure-list"),
+            {"patient_id": patient.id, "procedure_name": "C-Section", "procedure_date": "2024-03-10"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_assigned_doctor_sees_patients_records(self, doctor_client, doctor_user):
+        patient = PatientUserFactory()
+        PatientDoctorAssignment.objects.create(patient=patient, doctor=doctor_user)
+        SurgicalProcedureRecord.objects.create(
+            patient=patient, procedure_name="Cerclage", procedure_date=date.today()
+        )
+        resp = doctor_client.get(reverse("surgical-procedure-list"))
+        assert resp.data["count"] == 1
+
+
+class TestExerciseVideos:
+    def test_any_authenticated_role_can_read(self, patient_client, doctor_client, admin_client):
+        ExerciseVideo.objects.create(
+            title="First trimester breathing",
+            category=ExerciseVideo.Category.BREATHING,
+            video_url="https://example.com/video1",
+        )
+        for client in (patient_client, doctor_client, admin_client):
+            resp = client.get(reverse("exercise-video-list"))
+            assert resp.status_code == status.HTTP_200_OK
+            assert resp.data["count"] == 1
+
+    def test_anonymous_user_rejected(self, anon_client):
+        resp = anon_client.get(reverse("exercise-video-list"))
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_no_write_endpoint_exposed(self, admin_client):
+        """Admin-managed via Django admin only, per the doc's 'no media storage' decision."""
+        resp = admin_client.post(
+            reverse("exercise-video-list"),
+            {"title": "x", "category": "exercise", "video_url": "https://example.com/x"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_405_METHOD_NOT_ALLOWED

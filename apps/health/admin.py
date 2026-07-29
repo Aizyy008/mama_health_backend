@@ -4,7 +4,9 @@ from apps.health.models import (
     BabySizeReference,
     BloodPressureReading,
     BloodSugarReading,
+    ExerciseVideo,
     KickCountSession,
+    SurgicalProcedureRecord,
     SymptomLog,
     SymptomType,
     WaterIntakeEntry,
@@ -49,3 +51,16 @@ class KickCountSessionAdmin(admin.ModelAdmin):
 @admin.register(BabySizeReference)
 class BabySizeReferenceAdmin(admin.ModelAdmin):
     list_display = ["week", "size_comparison", "length_cm", "weight_grams"]
+
+
+@admin.register(SurgicalProcedureRecord)
+class SurgicalProcedureRecordAdmin(admin.ModelAdmin):
+    list_display = ["patient", "procedure_name", "procedure_date", "hospital_name"]
+    search_fields = ["patient__email", "procedure_name"]
+
+
+@admin.register(ExerciseVideo)
+class ExerciseVideoAdmin(admin.ModelAdmin):
+    list_display = ["title", "category", "trimester", "duration_minutes"]
+    list_filter = ["category", "trimester"]
+    search_fields = ["title"]
