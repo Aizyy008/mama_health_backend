@@ -1,16 +1,12 @@
 from django.db.models import Sum
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from apps.accounts.models import User
-from apps.appointments.models import PatientDoctorAssignment
-from apps.core.constants import Role
 from apps.core.permissions import IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatient
+from apps.core.utils import resolve_patient_from_request
 from apps.core.viewsets import PatientOwnedCreateMixin, PatientScopedQuerysetMixin
 from apps.health import services
 from apps.health.models import BabySizeReference, BloodPressureReading, BloodSugarReading, KickCountSession, KickEvent, SymptomLog, WaterIntakeEntry
@@ -150,21 +146,7 @@ class PregnancyProgressView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        user = request.user
-        if user.role == Role.PATIENT:
-            patient = user
-        else:
-            patient_id = request.query_params.get("patient_id")
-            if not patient_id:
-                return Response(
-                    {"detail": "patient_id query parameter is required."}, status=status.HTTP_400_BAD_REQUEST
-                )
-            patient = get_object_or_404(User, id=patient_id, role=Role.PATIENT)
-            if user.role == Role.DOCTOR and not PatientDoctorAssignment.objects.filter(
-                doctor=user, patient=patient
-            ).exists():
-                raise PermissionDenied("You are not assigned to this patient.")
-
+        patient = resolve_patient_from_request(request)
         profile = getattr(patient, "patient_profile", None)
         data = services.get_pregnancy_progress(profile) if profile else None
         if data is None:

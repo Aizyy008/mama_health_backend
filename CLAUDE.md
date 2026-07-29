@@ -40,8 +40,8 @@ One Django app per bounded context, all under `apps/`:
 | `accounts` | Custom `User` (email-based, `role` field), `PatientProfile`, `DoctorProfile`, `DoctorInvite`, email verification, JWT auth, doctor invite/provisioning | ✅ built (Phase 1) |
 | `appointments` | `Appointment`, `PatientDoctorAssignment` (the derived doctor↔patient access table every other app checks) | ✅ built (Phase 2) |
 | `health` | Blood pressure, blood sugar, symptoms, water intake, kick counter, pregnancy progress (computed, not stored), baby-size-by-week static reference | ✅ built (Phase 3) |
-| `diet` | Doctor-authored `DietPlan` (meals, foods to avoid, hydration target) | ⏳ not started (Phase 4) |
-| `medicines` | `MedicineReminder` + `MedicineIntakeLog` | ⏳ not started (Phase 4) |
+| `diet` | Doctor-authored `DietPlan` (meals, foods to avoid, hydration target) | ✅ built (Phase 4) |
+| `medicines` | `MedicineReminder` + `MedicineIntakeLog` | ✅ built (Phase 4) |
 | `notifications` | In-app `Notification`, FCM/WhatsApp adapters, Celery reminder/broadcast tasks | ⏳ not started (Phase 5) |
 | `hospitals` | Google Places proxy, Redis-cached | ⏳ not started (Phase 6) |
 | `ai_assistant` | `ChatSession`/`ChatMessage`, OpenAI/Gemini adapter, en/ur | ⏳ not started (Phase 7) |
@@ -57,7 +57,10 @@ No separate "admin" Django app — Admin is a permission tier (`IsAdmin`), not a
 - **RBAC**: `apps/core/permissions.py` has `IsPatient`, `IsDoctor`, `IsAdmin`, `IsDoctorOrAdmin`, `IsOwnerPatientOrAssignedDoctorOrAdmin`. `apps/core/viewsets.py` has `PatientScopedQuerysetMixin` (auto-scopes `get_queryset()` by role for any model with a `patient` FK) and `PatientOwnedCreateMixin` (forces `patient=request.user` on create when the requester is a patient). **Every new clinical viewset should mix these in rather than reimplementing scoping.**
 - **"Daily reset" data (water intake, kick counter)**: never destructive. Every entry gets a denormalized `log_date`; "today" is a query-time `filter(log_date=today)`. No cron job resets anything — this avoids an entire class of midnight/timezone bugs. Apply this same pattern in `health` (Phase 3).
 - **Computed, not stored**: pregnancy progress is derived from `PatientProfile.lmp_date`/`edd_date` at read time — don't add a `PregnancyProgress` model.
-- **Object-level permissions never run on `create()`** — DRF only calls `has_object_permission` for retrieve/update/destroy, where an object already exists. Any check that depends on *which* patient a doctor is writing a record for (e.g. "is this doctor assigned to this patient?") must live in the **serializer's `validate()`**, not the permission class, or a doctor can write clinical data for any patient globally. This is exactly what `core.serializers.PatientOwnedModelSerializer.validate()` does — reuse it (or replicate the same check) for every new patient-owned write in `diet`/`medicines`/future apps rather than assuming the permission class alone covers writes.
+- **Object-level permissions never run on `create()`** — DRF only calls `has_object_permission` for retrieve/update/destroy, where an object already exists. Any check that depends on *which* patient a doctor is writing a record for (e.g. "is this doctor assigned to this patient?") must live in the **serializer's `validate()`**, not the permission class, or a doctor can write clinical data for any patient globally. This is exactly what `core.serializers.PatientOwnedModelSerializer.validate()` does — reuse it for every new patient-owned write.
+  - **Subtlety found in Phase 4**: that `validate()` must distinguish create vs. update. `patient_id` is only *required* when creating on a patient's behalf — on a partial update (e.g. a doctor PATCHing just `{"notes": ...}`), an omitted `patient_id` legitimately means "keep the existing patient", not a missing field. The doctor-assignment check still re-runs on every update though (against `self.instance.patient` if not resupplied), in case a payload tries to reassign the record to a different patient. Get this wrong and every doctor-side PATCH/PUT 400s incorrectly — there was no test coverage for doctor updates until Phase 4's diet plan tests caught it.
+  - **Indirect-patient models need a different approach entirely**: `MedicineIntakeLog` only reaches its patient via `reminder.patient`, not a direct FK — `IsOwnerPatientOrAssignedDoctorOrAdmin` (which reads `obj.patient_id`) would wrongly reject even the rightful owner. For a read-only viewset, `get_queryset()` scoping (via `patient_field_name="reminder__patient"`) already fully protects both list and retrieve, so no object permission class is needed there at all — see `apps/medicines/views.py::MedicineIntakeLogViewSet`.
+- **`apps/core/utils.py::resolve_patient_from_request(request)`** — shared helper for any endpoint where a patient sees their own thing but a doctor/admin must pass `?patient_id=` (with the doctor's assignment checked). Used by `PregnancyProgressView` and `DietPlanViewSet.active`; reuse it rather than re-deriving this pattern a fourth time.
 - **Pluggable third-party adapters**: every optional integration follows the same shape — an abstract adapter class, one or more concrete implementations, a `NullXAdapter`/no-op fallback, and a `get_x_adapter()` factory function keyed off `settings.X_CREDENTIAL` presence. See the template comment in `notifications/adapters/` once Phase 5 lands; until then, follow the shape described in the Notifications section of this file.
 - **Error responses**: every error envelope is `{"detail": <one clear, specific, actionable sentence>, "errors": <per-field breakdown or null>}`, enforced globally by `apps/core/exceptions.py::custom_exception_handler`. `detail` is never a generic placeholder like "Validation failed." — it synthesizes the first real message found (DRF/Django's built-in field messages are already specific, e.g. "This password is too short. It must contain at least 8 characters."). When writing a NEW custom validation message anywhere (serializers, services raising `ValueError` that a view turns into a 400), phrase it as a complete, actionable sentence a patient/doctor could read directly — not a terse fragment. Get the HTTP status code right: 400 validation, 401 unauthenticated, 403 forbidden (authenticated but not allowed), 404 not found/not visible to this role, 429 throttled.
 - **Swagger tags**: every view/viewset gets `@extend_schema(tags=["..."])` (or `@extend_schema_view(...)` for ViewSets) matching the `SPECTACULAR_SETTINGS["TAGS"]` list in `config/settings/base.py` — this tag taxonomy is the actual handoff table of contents for the Flutter developer.
@@ -111,6 +114,17 @@ GET           /api/v1/health/pregnancy-progress/          patient: own; doctor/a
 ```
 All patient-owned viewsets use `core.viewsets.PatientScopedQuerysetMixin` + `PatientOwnedCreateMixin` + `core.serializers.PatientOwnedModelSerializer` — this is the normal case (contrast with Appointment's bespoke handling above).
 
+## Diet & Medicines endpoints (built, Phase 4)
+
+```
+GET/POST/PATCH  /api/v1/diet/plans/{,{id}/}     doctor/admin write, patient read-only (403 on patient write)
+GET             /api/v1/diet/plans/active/       resolve_patient_from_request-based; 404 if no active plan
+GET/POST/PATCH  /api/v1/medicines/reminders/{,{id}/}         patient-owned (standard pattern)
+POST            /api/v1/medicines/reminders/{id}/log-intake/  {status: taken|skipped, scheduled_for?}
+GET             /api/v1/medicines/intake-logs/{,{id}/}        read-only, scoped via reminder__patient
+```
+`DietPlan`: only one `is_active=True` plan per patient — creating a new one deactivates (never deletes) the previous, preserving history (`apps/diet/services.py`). Meals/foods-to-avoid are nested writable serializers, replaced wholesale on update (delete + bulk_create), not diffed.
+
 ## Notifications architecture (design target for Phase 5 — not yet built)
 
 ```python
@@ -148,9 +162,9 @@ Shared fixtures live in the **root** `conftest.py` (not inside an app) so they'r
 0. ✅ Skeleton — settings split, `core` app, custom `User` model, drf-spectacular, `.env`/`.gitignore`, Render config, local Docker db/redis
 1. ✅ Auth & Accounts — registration/verification/JWT/password-reset/doctor-invite, `/me`, 21 passing tests
 2. ✅ Appointments + `PatientDoctorAssignment` — booking, status state machine, doctor notes, doctor-scoped `PatientListView`; 13 passing tests
-3. ✅ Health tracking — vitals, symptoms (upsert-by-day), water/kick trackers, computed pregnancy progress, seeded baby-size reference; 20 passing tests (54 total across the project, plus a global fix: error responses now always carry a specific, actionable `detail` message — see "Error responses" convention above)
-4. ⏳ **Next**: Diet & Medicines
-5. Notifications infra (Celery/Redis live, adapters with null fallbacks, in-app inbox)
+3. ✅ Health tracking — vitals, symptoms (upsert-by-day), water/kick trackers, computed pregnancy progress, seeded baby-size reference; 20 passing tests, plus a global fix: error responses now always carry a specific, actionable `detail` message — see "Error responses" convention above
+4. ✅ Diet & Medicines — doctor-authored diet plans with one-active-per-patient history, medicine reminders + intake logging; 21 passing tests (75 total across the project). Also fixed a real bug found here: the shared `PatientOwnedModelSerializer.validate()` didn't distinguish create vs. update, so every doctor-side PATCH was wrongly 400ing — see the "Key modeling patterns" subtlety note above.
+5. ⏳ **Next**: Notifications infra (Celery/Redis live, adapters with null fallbacks, in-app inbox)
 6. Hospitals proxy + Emergency SOS
 7. AI Assistant
 8. Reports + admin aggregate views

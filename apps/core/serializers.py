@@ -32,18 +32,25 @@ class PatientOwnedModelSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         request = self.context["request"]
         user = request.user
-        if user.role != Role.PATIENT and "patient" not in attrs:
+
+        # patient_id is only required when CREATING on a patient's behalf —
+        # on an update, an omitted patient_id legitimately means "keep the
+        # existing patient", not "missing field".
+        if user.role != Role.PATIENT and self.instance is None and "patient" not in attrs:
             raise serializers.ValidationError(
                 {"patient_id": "Required when acting on behalf of a patient."}
             )
-        if user.role == Role.DOCTOR and "patient" in attrs:
+
+        target_patient = attrs.get("patient") or (self.instance.patient if self.instance else None)
+        if user.role == Role.DOCTOR and target_patient is not None:
             # object-level permissions (IsOwnerPatientOrAssignedDoctorOrAdmin)
             # only run on retrieve/update/destroy, never on create — so the
             # assignment check has to happen here, or a doctor could write
-            # clinical records for any patient globally.
+            # clinical records for any patient globally. Re-checked on every
+            # update too, in case a payload tries to reassign the patient.
             from apps.appointments.models import PatientDoctorAssignment
 
-            if not PatientDoctorAssignment.objects.filter(doctor=user, patient=attrs["patient"]).exists():
+            if not PatientDoctorAssignment.objects.filter(doctor=user, patient=target_patient).exists():
                 raise serializers.ValidationError(
                     {"patient_id": "You are not assigned to this patient."}
                 )
