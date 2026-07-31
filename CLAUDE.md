@@ -205,7 +205,7 @@ GET /api/v1/reports/admin/stats/       admin only — counts (patients, doctors,
 - Render's free web service spins down after inactivity, so the first request after a quiet period will be slow (cold start) — including the very first GitHub Actions cron ping of the day.
 - Hospitals search caching now uses local-memory cache — it resets on every cold start/restart (free-tier instances restart often), so the cache is less effective than it'd be with real Redis, but still functionally correct (just calls Google Places slightly more often).
 
-**Deployment runbook** (for continuing this on a fresh machine or handing off):
+**Deployment runbook** (summary — see `DEPLOYMENT.md` for the full step-by-step guide with env var tables, verification checklist, and troubleshooting):
 1. Create a free Postgres project on [neon.tech](https://neon.tech) (no card required). Copy its connection string (`sslmode=require` included).
 2. In Render: New → Web Service → connect this GitHub repo → Free instance type.
    - Build command: `pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py seed_admin`

@@ -91,4 +91,4 @@ DJANGO_SETTINGS_MODULE=config.settings.test pytest
 
 See `.env.example` for every configuration variable, including third-party integrations (AI provider, WhatsApp Business API, Firebase Cloud Messaging, Google Places) which are all optional at boot — the app runs end-to-end without them via null/no-op adapters, and real credentials can be dropped in later with zero code changes.
 
-See `CLAUDE.md` for the full architectural rationale, locked-in decisions, and per-phase build notes — it's written to let a fresh session (human or AI) pick this project up with full context.
+See `CLAUDE.md` for the full architectural rationale, locked-in decisions, and per-phase build notes — it's written to let a fresh session (human or AI) pick this project up with full context. See `DEPLOYMENT.md` for step-by-step deployment instructions (Neon + Render + GitHub Actions, $0/month).
