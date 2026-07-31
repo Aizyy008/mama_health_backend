@@ -216,26 +216,48 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
 # ---------------------------------------------------------------------------
-# Cache (Redis) & Celery
+# Cache (Redis, optional) & Celery
 # ---------------------------------------------------------------------------
-REDIS_URL = env.str("REDIS_URL", default="redis://localhost:6379/0")
+# Redis is entirely optional. If REDIS_URL isn't set, the cache falls back to
+# local-memory (fine for the hospitals-search cache on a single free-tier
+# instance) and Celery has no broker to talk to — which is also fine, because
+# CELERY_TASK_ALWAYS_EAGER (see below) means task.delay() calls execute
+# synchronously in-process and never touch a broker at all. This lets the
+# whole system run on just a web service + a database, no paid worker or
+# managed Redis required. Set REDIS_URL (and CELERY_TASK_ALWAYS_EAGER=False)
+# later if/when a real Celery worker is added.
+REDIS_URL = env.str("REDIS_URL", default="")
 
-CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL,
-        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
-        "KEY_PREFIX": "mama_health",
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+            "KEY_PREFIX": "mama_health",
+        }
     }
-}
+    CELERY_BROKER_URL = REDIS_URL
+else:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    CELERY_BROKER_URL = "memory://"
 
-CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = None
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
-CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
+# Default True: without a separate worker process, .delay() should run the
+# task inline immediately rather than queuing it somewhere nothing consumes.
+# dev/test explicitly reaffirm this; prod.py can override to False once a
+# real worker + REDIS_URL exist.
+CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=True)
+
+# Shared secret for the /internal/tasks/<name>/ endpoints that an external
+# scheduler (GitHub Actions cron, in the absence of a paid Celery Beat
+# worker) calls to trigger the periodic jobs. Required in prod — see
+# config/settings/prod.py.
+CRON_SECRET = env.str("CRON_SECRET", default="")
 
 # ---------------------------------------------------------------------------
 # Email

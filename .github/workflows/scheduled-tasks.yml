@@ -1,0 +1,49 @@
+# Replaces a paid, always-on Celery Beat worker: pings the backend's
+# secret-protected /internal/tasks/<name>/ endpoint on a schedule so the
+# whole system can run on a single free web service with no dedicated
+# background worker. See apps/core/views.py::run_scheduled_task and
+# CLAUDE.md's "Zero-cost deployment" section for the full rationale.
+#
+# Requires two repo secrets (Settings → Secrets and variables → Actions):
+#   BACKEND_BASE_URL   e.g. https://mama-health-backend.onrender.com
+#   CRON_SECRET        must match the CRON_SECRET env var set on the backend
+name: Scheduled Tasks
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # medicine + appointment reminders
+    - cron: "0 8 * * *" # weekly pregnancy update (08:00 UTC)
+    - cron: "0 2 * * *" # expired invite/token cleanup (02:00 UTC)
+  workflow_dispatch: {} # allows a manual "Run workflow" for testing
+
+jobs:
+  run-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Medicine reminders
+        if: github.event.schedule == '*/5 * * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl --fail --silent --show-error -X POST \
+            "${{ secrets.BACKEND_BASE_URL }}/internal/tasks/medicine-reminders/" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"
+
+      - name: Appointment reminders
+        if: github.event.schedule == '*/5 * * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl --fail --silent --show-error -X POST \
+            "${{ secrets.BACKEND_BASE_URL }}/internal/tasks/appointment-reminders/" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"
+
+      - name: Weekly pregnancy update
+        if: github.event.schedule == '0 8 * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl --fail --silent --show-error -X POST \
+            "${{ secrets.BACKEND_BASE_URL }}/internal/tasks/weekly-pregnancy-update/" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"
+
+      - name: Cleanup expired tokens
+        if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          curl --fail --silent --show-error -X POST \
+            "${{ secrets.BACKEND_BASE_URL }}/internal/tasks/cleanup-tokens/" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"

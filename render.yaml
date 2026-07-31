@@ -1,68 +1,31 @@
-envVarGroups:
-  - name: mama-health-shared-env
-    envVars:
-      - key: SECRET_KEY
-        generateValue: true
-      - key: DATABASE_URL
-        fromDatabase:
-          name: mama-health-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: mama-health-redis
-          type: redis
-          property: connectionString
-      # The following are added manually in the Render dashboard on this
-      # group once the client supplies real credentials — never committed:
-      # ALLOWED_HOSTS, CORS_ALLOWED_ORIGINS, FRONTEND_URL,
-      # EMAIL_HOST / EMAIL_HOST_USER / EMAIL_HOST_PASSWORD,
-      # AI_PROVIDER / AI_API_KEY, WHATSAPP_API_TOKEN / WHATSAPP_PHONE_NUMBER_ID,
-      # FCM_CREDENTIALS_JSON, GOOGLE_PLACES_API_KEY,
-      # SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
-
+# Zero-cost deployment topology: a single free web service. No managed
+# Postgres/Redis, no separate Celery worker/beat — see CLAUDE.md's
+# "Zero-cost deployment" section for why and what's traded off (background
+# jobs run inline via CELERY_TASK_ALWAYS_EAGER, and the four scheduled jobs
+# are triggered by a GitHub Actions cron workflow instead of Celery Beat).
+#
+# DATABASE_URL points at an external Neon Postgres project (not a Render-
+# managed database, so it can't use Render's `fromDatabase` reference) —
+# set it manually in the dashboard, or as a env var when applying this
+# blueprint. Same for the other secrets listed below.
 services:
   - type: web
     name: mama-health-api
     env: python
-    plan: starter
-    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
+    plan: free
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py seed_admin"
     startCommand: "gunicorn config.wsgi:application"
-    envVarGroups:
-      - mama-health-shared-env
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod
-
-  - type: worker
-    name: mama-health-celery-worker
-    env: python
-    plan: starter
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery -A config worker -l info"
-    envVarGroups:
-      - mama-health-shared-env
-    envVars:
-      - key: DJANGO_SETTINGS_MODULE
-        value: config.settings.prod
-
-  - type: worker
-    name: mama-health-celery-beat
-    env: python
-    plan: starter
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
-    envVarGroups:
-      - mama-health-shared-env
-    envVars:
-      - key: DJANGO_SETTINGS_MODULE
-        value: config.settings.prod
-
-databases:
-  - name: mama-health-db
-    plan: starter
-    postgresMajorVersion: 16
-
-  - name: mama-health-redis
-    type: redis
-    plan: starter
-    ipAllowList: []
+      - key: SECRET_KEY
+        generateValue: true
+      # Set these manually in the Render dashboard — never committed here:
+      # DATABASE_URL           (Neon connection string, sslmode=require)
+      # ALLOWED_HOSTS          (the .onrender.com domain Render assigns after first deploy)
+      # CORS_ALLOWED_ORIGINS   (the Flutter Web admin's origin, once known)
+      # CRON_SECRET            (matches the GitHub Actions repo secret of the same name)
+      # SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
+      # FRONTEND_URL, EMAIL_HOST / EMAIL_HOST_USER / EMAIL_HOST_PASSWORD
+      # AI_PROVIDER / AI_API_KEY, WHATSAPP_API_TOKEN / WHATSAPP_PHONE_NUMBER_ID,
+      # FCM_CREDENTIALS_JSON, GOOGLE_PLACES_API_KEY

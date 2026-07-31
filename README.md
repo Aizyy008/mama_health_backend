@@ -4,7 +4,7 @@ Django REST API for the Mama Health pregnancy care platform. Serves the Patient,
 
 ## Stack
 
-Django 5 + DRF, PostgreSQL, Redis (cache + Celery broker), Celery/Celery Beat for background jobs, JWT auth (simplejwt), deployed on Render.
+Django 5 + DRF, PostgreSQL, JWT auth (simplejwt). Deployed at $0/month: Render free web service + Neon free Postgres, no managed Redis or dedicated worker — background jobs run inline, and scheduled reminders are triggered by a free GitHub Actions cron instead of Celery Beat. See `CLAUDE.md`'s "Zero-cost deployment" section for the full rationale and runbook. Redis remains fully supported (cache + real Celery broker) for local dev and as a drop-in upgrade path if a paid worker is ever added later.
 
 ## Local setup
 
@@ -39,7 +39,7 @@ python manage.py seed_test_data
 - Django admin: http://127.0.0.1:8000/admin/
 - Health check: http://127.0.0.1:8000/healthz/
 
-To start background jobs (Celery worker + beat), also run in separate terminals:
+Background jobs run inline by default (`CELERY_TASK_ALWAYS_EAGER=True`) — no separate process needed for normal local dev. To test real async behavior against local Redis instead, set `CELERY_TASK_ALWAYS_EAGER=False` in `.env` and run in separate terminals:
 ```bash
 celery -A config worker -l info
 celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
@@ -85,7 +85,8 @@ DJANGO_SETTINGS_MODULE=config.settings.test pytest
   - `ai_assistant` — AI pregnancy chat assistant (OpenAI/Gemini)
   - `emergency` — SOS with Celery-driven fan-out
   - `reports` — cross-app patient summary + admin system stats
-- `render.yaml` — Render deployment topology (web + Celery worker + Celery beat + managed Postgres/Redis)
+- `render.yaml` — Render deployment topology (single free web service; Postgres is external, on Neon)
+- `.github/workflows/scheduled-tasks.yml` — cron-triggered scheduled jobs, standing in for a paid Celery Beat worker
 - `docs/openapi.yaml` — versioned API contract snapshot for frontend integration
 
 See `.env.example` for every configuration variable, including third-party integrations (AI provider, WhatsApp Business API, Firebase Cloud Messaging, Google Places) which are all optional at boot — the app runs end-to-end without them via null/no-op adapters, and real credentials can be dropped in later with zero code changes.
