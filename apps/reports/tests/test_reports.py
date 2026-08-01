@@ -75,3 +75,62 @@ class TestAdminStats:
         assert resp.data["total_patients"] == 2
         assert resp.data["total_doctors"] == 1
         assert resp.data["total_appointments"] == 1
+
+    def test_stats_include_today_appointments_and_recent_activity(self, admin_client):
+        patient = PatientUserFactory()
+        doctor = DoctorUserFactory()
+        AppointmentFactory(patient=patient, doctor=doctor, scheduled_at=timezone.now() + timedelta(hours=2))
+
+        resp = admin_client.get(reverse("report-admin-stats"))
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["today_appointments"] == 1
+        assert any(a["type"] == "appointment_booked" for a in resp.data["recent_activities"])
+
+    def test_trimester_distribution_buckets_patients_correctly(self, admin_client):
+        first_tri = PatientUserFactory()
+        first_tri.patient_profile.lmp_date = timezone.now().date() - timedelta(weeks=6)
+        first_tri.patient_profile.save()
+
+        third_tri = PatientUserFactory()
+        third_tri.patient_profile.lmp_date = timezone.now().date() - timedelta(weeks=32)
+        third_tri.patient_profile.save()
+
+        PatientUserFactory()  # no lmp_date — falls into "unknown"
+
+        resp = admin_client.get(reverse("report-admin-stats"))
+        dist = resp.data["trimester_distribution"]
+        assert dist["trimester_1"] == 1
+        assert dist["trimester_3"] == 1
+        assert dist["unknown"] == 1
+
+
+class TestGlobalSearch:
+    def test_search_requires_admin(self, patient_client, doctor_client):
+        assert patient_client.get(reverse("report-search"), {"q": "ayesha"}).status_code == status.HTTP_403_FORBIDDEN
+        assert doctor_client.get(reverse("report-search"), {"q": "ayesha"}).status_code == status.HTTP_403_FORBIDDEN
+
+    def test_search_rejects_short_query(self, admin_client):
+        resp = admin_client.get(reverse("report-search"), {"q": "a"})
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_search_finds_doctor_by_name(self, admin_client):
+        DoctorUserFactory(first_name="Ayesha", last_name="Malik")
+        DoctorUserFactory(first_name="Zainab", last_name="Khan")
+
+        resp = admin_client.get(reverse("report-search"), {"q": "ayesha"})
+        assert resp.status_code == status.HTTP_200_OK
+        assert len(resp.data["doctors"]) == 1
+        assert resp.data["doctors"][0]["first_name"] == "Ayesha"
+
+    def test_search_finds_patient_by_email(self, admin_client):
+        PatientUserFactory(email="sara.ahmed@example.com")
+        resp = admin_client.get(reverse("report-search"), {"q": "sara.ahmed"})
+        assert resp.status_code == status.HTTP_200_OK
+        assert len(resp.data["patients"]) == 1
+
+    def test_search_finds_appointment_by_patient_name(self, admin_client):
+        patient = PatientUserFactory(first_name="Sara", last_name="Ahmed")
+        AppointmentFactory(patient=patient)
+        resp = admin_client.get(reverse("report-search"), {"q": "Sara"})
+        assert resp.status_code == status.HTTP_200_OK
+        assert len(resp.data["appointments"]) == 1

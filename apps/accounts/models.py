@@ -84,3 +84,17 @@ class PasswordResetToken(TimeStampedModel):
     token = models.CharField(max_length=128, unique=True)
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
+
+
+class PasswordResetOTP(TimeStampedModel):
+    """
+    6-digit code emailed for the forgot-password flow's first step. Verifying
+    one (see accounts.services.verify_password_reset_otp) issues a
+    PasswordResetToken for the actual /password/reset/ step, so the OTP
+    itself is single-purpose (proves email ownership) and short-lived.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="password_reset_otps")
+    otp_code = models.CharField(max_length=6)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)

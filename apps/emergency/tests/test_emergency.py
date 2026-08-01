@@ -74,6 +74,21 @@ class TestReadScoping:
         resp = doctor_client.get(reverse("emergency-sos-list"))
         assert resp.data["count"] == 1
 
+    def test_admin_can_filter_by_status_active(self, admin_client):
+        active = EmergencySOSEvent.objects.create(patient=PatientUserFactory(), status=EmergencySOSEvent.Status.ACTIVE)
+        EmergencySOSEvent.objects.create(patient=PatientUserFactory(), status=EmergencySOSEvent.Status.RESOLVED)
+        resp = admin_client.get(reverse("emergency-sos-list"), {"status": "active"})
+        assert resp.status_code == status.HTTP_200_OK
+        returned_ids = {row["id"] for row in resp.data["results"]}
+        assert returned_ids == {active.id}
+
+    def test_admin_can_filter_by_patient_id(self, admin_client, patient_user):
+        EmergencySOSEvent.objects.create(patient=patient_user)
+        EmergencySOSEvent.objects.create(patient=PatientUserFactory())
+        resp = admin_client.get(reverse("emergency-sos-list"), {"patient_id": patient_user.id})
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["count"] == 1
+
 
 class TestResolve:
     def test_patient_can_resolve_own_event_as_false_alarm(self, patient_client, patient_user):

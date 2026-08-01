@@ -59,6 +59,11 @@ class AppointmentStatusUpdateSerializer(serializers.Serializer):
     cancellation_reason = serializers.CharField(required=False, allow_blank=True, default="")
 
 
+class AppointmentRescheduleSerializer(serializers.Serializer):
+    scheduled_at = serializers.DateTimeField()
+    duration_minutes = serializers.IntegerField(required=False, min_value=1)
+
+
 class AppointmentDoctorNotesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment

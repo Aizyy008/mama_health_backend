@@ -7,7 +7,10 @@ class PatientScopedQuerysetMixin:
     with a FK to the patient (default field name "patient"):
       - PATIENT: only their own records
       - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-      - ADMIN: unrestricted
+      - ADMIN: unrestricted by default, or narrowed to one patient via
+        `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+        full record — without this, admin would see every patient's rows
+        mixed together with no way to filter to just one)
     """
 
     patient_field_name = "patient"
@@ -24,6 +27,10 @@ class PatientScopedQuerysetMixin:
                 doctor=user
             ).values_list("patient_id", flat=True)
             return qs.filter(**{f"{self.patient_field_name}_id__in": assigned_patient_ids})
+
+        patient_id = self.request.query_params.get("patient_id")
+        if patient_id:
+            return qs.filter(**{f"{self.patient_field_name}_id": patient_id})
         return qs
 
 

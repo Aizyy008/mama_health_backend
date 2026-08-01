@@ -9,6 +9,7 @@ from apps.accounts.models import (
     DoctorInvite,
     DoctorProfile,
     EmailVerificationToken,
+    PasswordResetOTP,
     PasswordResetToken,
     PatientProfile,
     User,
@@ -18,6 +19,10 @@ from apps.core.constants import Role
 
 def generate_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def generate_otp_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def register_patient(*, email, password, first_name="", last_name="", phone_number=""):
@@ -76,25 +81,66 @@ def resend_verification(email: str) -> None:
 
 
 def request_password_reset(email: str) -> None:
+    """
+    Step 1 of the forgot-password flow: emails a 6-digit OTP (not a link).
+    Always silent on a nonexistent email (doesn't leak account existence).
+    Any previously-issued, still-unused OTPs for this user are invalidated
+    so only the most recently requested code is valid — prevents an old,
+    leaked-but-unused code from staying usable indefinitely.
+    """
     try:
         user = User.objects.get(email__iexact=email)
     except User.DoesNotExist:
         return  # don't leak account existence
 
-    token = generate_token()
-    expires_at = timezone.now() + timedelta(hours=settings.PASSWORD_RESET_TOKEN_EXPIRY_HOURS)
-    PasswordResetToken.objects.create(user=user, token=token, expires_at=expires_at)
-    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+    PasswordResetOTP.objects.filter(user=user, used_at__isnull=True).update(used_at=timezone.now())
+
+    otp_code = generate_otp_code()
+    expires_at = timezone.now() + timedelta(minutes=settings.PASSWORD_RESET_OTP_EXPIRY_MINUTES)
+    PasswordResetOTP.objects.create(user=user, otp_code=otp_code, expires_at=expires_at)
     send_mail(
-        subject="Reset your Mama Health password",
+        subject="Your Mama Health password reset code",
         message=(
-            f"Reset your password:\n\n{reset_url}\n\n"
-            f"This link expires in {settings.PASSWORD_RESET_TOKEN_EXPIRY_HOURS} hours. "
+            f"Your password reset code is: {otp_code}\n\n"
+            f"This code expires in {settings.PASSWORD_RESET_OTP_EXPIRY_MINUTES} minutes. "
             "If you didn't request this, you can safely ignore this email."
         ),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[user.email],
     )
+
+
+def verify_password_reset_otp(*, email: str, otp_code: str) -> str:
+    """
+    Step 2: checks the code and, on success, issues a PasswordResetToken
+    (the same mechanism /password/reset/ already consumed under the old
+    link-based flow) so the frontend doesn't need to resubmit the OTP again
+    at the final step. Raises ValueError with a message safe to show the
+    user (this endpoint is inherently email-scoped, so it doesn't need to
+    stay silent about existence the way the request step does).
+    """
+    try:
+        user = User.objects.get(email__iexact=email)
+    except User.DoesNotExist as exc:
+        raise ValueError("Invalid or expired code. Please request a new one.") from exc
+
+    try:
+        record = PasswordResetOTP.objects.filter(user=user, otp_code=otp_code, used_at__isnull=True).latest(
+            "created_at"
+        )
+    except PasswordResetOTP.DoesNotExist as exc:
+        raise ValueError("Invalid or expired code. Please request a new one.") from exc
+
+    if record.expires_at < timezone.now():
+        raise ValueError("This code has expired. Please request a new one.")
+
+    record.used_at = timezone.now()
+    record.save(update_fields=["used_at"])
+
+    token = generate_token()
+    expires_at = timezone.now() + timedelta(hours=settings.PASSWORD_RESET_TOKEN_EXPIRY_HOURS)
+    PasswordResetToken.objects.create(user=user, token=token, expires_at=expires_at)
+    return token
 
 
 def reset_password(*, token: str, new_password: str) -> User:

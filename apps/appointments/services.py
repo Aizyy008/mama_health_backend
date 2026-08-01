@@ -69,6 +69,43 @@ def transition_status(*, appointment: Appointment, new_status: str, actor, cance
     return appointment
 
 
+_TERMINAL_STATUSES = {Appointment.Status.COMPLETED, Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW}
+
+
+def reschedule_appointment(*, appointment: Appointment, actor, scheduled_at, duration_minutes=None):
+    if appointment.status in _TERMINAL_STATUSES:
+        raise ValueError(f"Cannot reschedule a {appointment.get_status_display().lower()} appointment.")
+
+    appointment.scheduled_at = scheduled_at
+    update_fields = ["scheduled_at", "updated_at"]
+    if duration_minutes is not None:
+        appointment.duration_minutes = duration_minutes
+        update_fields.append("duration_minutes")
+    appointment.save(update_fields=update_fields)
+
+    from apps.notifications import services as notification_services
+
+    if actor.id == appointment.patient_id:
+        recipients = [appointment.doctor]
+    elif actor.id == appointment.doctor_id:
+        recipients = [appointment.patient]
+    else:
+        recipients = [appointment.patient, appointment.doctor]
+
+    when = timezone.localtime(appointment.scheduled_at).strftime("%b %d, %H:%M")
+    for recipient in recipients:
+        channels = ["push", "whatsapp"] if recipient.role == Role.DOCTOR else ["push"]
+        notification_services.notify(
+            recipient=recipient,
+            notification_type="appointment",
+            title="Appointment rescheduled",
+            body=f"Your appointment has been rescheduled to {when}.",
+            data={"appointment_id": appointment.id},
+            channels=channels,
+        )
+    return appointment
+
+
 def _notify_status_change(*, appointment: Appointment, actor):
     from apps.notifications import services as notification_services
 

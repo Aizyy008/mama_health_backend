@@ -163,3 +163,54 @@ class TestDoctorNotes:
         assert doctor_resp.status_code == status.HTTP_200_OK
         appt.refresh_from_db()
         assert appt.doctor_notes == "Patient is doing well."
+
+
+class TestReschedule:
+    def test_patient_can_reschedule_own_pending_appointment(self, patient_client, patient_user):
+        appt = AppointmentFactory(patient=patient_user, status=Appointment.Status.PENDING)
+        new_time = _future() + timedelta(days=1)
+        resp = patient_client.patch(
+            reverse("appointment-reschedule", args=[appt.id]),
+            {"scheduled_at": new_time.isoformat()},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        appt.refresh_from_db()
+        assert appt.scheduled_at == new_time
+        assert appt.status == Appointment.Status.PENDING
+
+    def test_cannot_reschedule_a_completed_appointment(self, admin_client):
+        appt = AppointmentFactory(status=Appointment.Status.COMPLETED)
+        resp = admin_client.patch(
+            reverse("appointment-reschedule", args=[appt.id]),
+            {"scheduled_at": _future().isoformat()},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_cannot_reschedule_someone_elses_appointment(self, patient_client):
+        appt = AppointmentFactory(status=Appointment.Status.PENDING)
+        resp = patient_client.patch(
+            reverse("appointment-reschedule", args=[appt.id]),
+            {"scheduled_at": _future().isoformat()},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+class TestAdminAppointmentFilters:
+    def test_admin_can_filter_appointments_by_patient_id(self, admin_client, patient_user):
+        AppointmentFactory(patient=patient_user)
+        AppointmentFactory()  # a different patient — must not appear
+        resp = admin_client.get(reverse("appointment-list"), {"patient_id": patient_user.id})
+        assert resp.status_code == status.HTTP_200_OK
+        assert all(row["patient"]["id"] == patient_user.id for row in resp.data["results"])
+        assert len(resp.data["results"]) == 1
+
+    def test_admin_can_filter_appointments_by_doctor_id(self, admin_client, doctor_user):
+        AppointmentFactory(doctor=doctor_user)
+        AppointmentFactory()  # a different doctor — must not appear
+        resp = admin_client.get(reverse("appointment-list"), {"doctor_id": doctor_user.id})
+        assert resp.status_code == status.HTTP_200_OK
+        assert all(row["doctor"]["id"] == doctor_user.id for row in resp.data["results"])
+        assert len(resp.data["results"]) == 1

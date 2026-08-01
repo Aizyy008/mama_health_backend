@@ -36,6 +36,15 @@ class TestBloodPressureRoleBoundaries:
         resp = doctor_client.get(reverse("blood-pressure-list"))
         assert resp.data["count"] == 1
 
+    def test_admin_sees_all_by_default_but_can_narrow_with_patient_id(self, admin_client, patient_user):
+        BloodPressureReadingFactory(patient=patient_user)
+        BloodPressureReadingFactory()  # a different patient
+        assert admin_client.get(reverse("blood-pressure-list")).data["count"] == 2
+
+        resp = admin_client.get(reverse("blood-pressure-list"), {"patient_id": patient_user.id})
+        assert resp.data["count"] == 1
+        assert resp.data["results"][0]["patient"]["id"] == patient_user.id
+
     def test_unassigned_doctor_cannot_create_reading_for_a_patient(self, doctor_client):
         """Regression test: create() has no object yet, so object-level
         permissions never run on POST — the assignment check must live in

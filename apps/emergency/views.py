@@ -1,5 +1,5 @@
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -27,7 +27,10 @@ _SOS_RESPONSE_EXAMPLE = {
     list=extend_schema(
         tags=[TAG],
         summary="List SOS events",
-        description="Role-scoped: patient's own; assigned doctor's/admin's view.",
+        description="Role-scoped: patient's own; assigned doctor's/admin's view (admin can also narrow to one patient with `?patient_id=`). Filter to just active events with `?status=active`.",
+        parameters=[
+            OpenApiParameter(name="status", type=str, location=OpenApiParameter.QUERY, required=False, description="Filter by status: active, resolved, or false_alarm."),
+        ],
         examples=[OpenApiExample("200 OK", value={"count": 1, "next": None, "previous": None, "results": [_SOS_RESPONSE_EXAMPLE]}, response_only=True, status_codes=["200"])],
     ),
     retrieve=extend_schema(tags=[TAG], summary="Get a single SOS event", examples=[OpenApiExample("200 OK", value=_SOS_RESPONSE_EXAMPLE, response_only=True, status_codes=["200"])]),
@@ -64,6 +67,13 @@ class EmergencySOSViewSet(PatientScopedQuerysetMixin, viewsets.ModelViewSet):
         if self.action == "create":
             return [permissions.IsAuthenticated(), IsPatient()]
         return super().get_permissions()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(patient=self.request.user)

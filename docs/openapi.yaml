@@ -289,10 +289,11 @@ paths:
   /api/v1/auth/password/forgot/:
     post:
       operationId: auth_password_forgot_create
-      description: Sends a reset link (`{FRONTEND_URL}/reset-password?token=...`)
-        if the email exists. Always returns 200 with the same message regardless —
-        does not leak account existence.
-      summary: Request a password reset email
+      description: 'Emails a 6-digit OTP code (expires after `PASSWORD_RESET_OTP_EXPIRY_MINUTES`,
+        default 10 min) if the account exists. Always returns 200 with the same message
+        regardless — does not leak account existence. Next step: `POST /auth/password/verify-otp/`
+        with the code from the email.'
+      summary: Request a password reset code (step 1 of 3)
       tags:
       - Auth
       requestBody:
@@ -323,16 +324,71 @@ paths:
               examples:
                 200OK:
                   value:
-                    detail: If that account exists, a password reset email has been
+                    detail: If that account exists, a password reset code has been
                       sent.
                   summary: 200 OK
+          description: ''
+  /api/v1/auth/password/verify-otp/:
+    post:
+      operationId: auth_password_verify_otp_create
+      description: Checks the emailed OTP code. On success, returns a `reset_token`
+        to use with `POST /auth/password/reset/` (step 3) — the frontend doesn't need
+        to resubmit the code again there. The code is single-use and only the most
+        recently requested one is valid.
+      summary: Verify the password reset code (step 2 of 3)
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordVerifyOTPRequest'
+            examples:
+              Request:
+                value:
+                  email: sara.ahmed@example.com
+                  otp_code: '482913'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordVerifyOTPRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordVerifyOTPRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordVerifyOTPResponse'
+              examples:
+                200OK:
+                  value:
+                    detail: Code verified.
+                    reset_token: 8fK2mZ...reset-token...
+                  summary: 200 OK
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailResponse'
+              examples:
+                400Invalid/expiredCode:
+                  value:
+                    detail: This code has expired. Please request a new one.
+                    errors: null
+                  summary: 400 Invalid/expired code
           description: ''
   /api/v1/auth/password/reset/:
     post:
       operationId: auth_password_reset_create
-      description: Consumes the single-use token from the password-reset email. Token
-        expires after `PASSWORD_RESET_TOKEN_EXPIRY_HOURS` (default 2h).
-      summary: Reset password with token
+      description: Consumes the single-use `reset_token` returned by `POST /auth/password/verify-otp/`.
+        Token expires after `PASSWORD_RESET_TOKEN_EXPIRY_HOURS` (default 2h).
+      summary: Reset password with token (step 3 of 3)
       tags:
       - Auth
       requestBody:
@@ -439,7 +495,8 @@ paths:
       description: Returns the authenticated user plus whichever of `patient_profile`/`doctor_profile`
         applies (the other is always `null`). Use `patient_profile.profile_complete`
         to decide whether to route a patient to the 'complete your profile' screen
-        after login.
+        after login. Works for all three roles — for an Admin, both nested profiles
+        are always `null`.
       summary: Get the current user
       tags:
       - Auth
@@ -473,6 +530,42 @@ paths:
                       profile_complete: true
                     doctor_profile: null
                   summary: 200 OK — patient
+          description: ''
+    patch:
+      operationId: auth_me_partial_update
+      description: Updates `first_name`/`last_name`/`phone_number` only — email, role,
+        and verification status are never editable here. For patient-specific fields
+        (LMP date, blood group, etc.) or doctor-specific fields (specialization, license),
+        use `/accounts/me/patient-profile/` or `/accounts/me/doctor-profile/` instead.
+        Works for all three roles, including Admin.
+      summary: Update the current user's profile
+      tags:
+      - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMeUpdateRequest'
+            examples:
+              Request:
+                value:
+                  first_name: Sara
+                  last_name: Ahmed
+                  phone_number: '+923001234567'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMeUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMeUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeUpdate'
           description: ''
   /api/v1/accounts/doctors/invite/:
     post:
@@ -588,64 +681,6 @@ paths:
                     detail: This invite has expired. Ask an admin to send a new one.
                     errors: null
                   summary: 400 Invalid/expired invite
-          description: ''
-  /api/v1/accounts/patients/:
-    get:
-      operationId: accounts_patients_list
-      description: Admin sees every patient. A doctor sees only patients assigned
-        to them (derived from `PatientDoctorAssignment`, created automatically the
-        first time that patient books an appointment with them). Forbidden for patients.
-      summary: List patients
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - Accounts
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedPatientListList'
-              examples:
-                200OK:
-                  value:
-                    count: 123
-                    next: http://api.example.org/accounts/?page=4
-                    previous: http://api.example.org/accounts/?page=2
-                    results:
-                    - count: 1
-                      next: null
-                      previous: null
-                      results:
-                      - id: 2
-                        email: sara.ahmed@example.com
-                        first_name: Sara
-                        last_name: Ahmed
-                        phone_number: '+923001234567'
-                        date_joined: '2026-01-15T10:30:00Z'
-                        patient_profile:
-                          date_of_birth: '1995-06-20'
-                          lmp_date: '2026-05-01'
-                          edd_date: null
-                          blood_group: O+
-                          emergency_contact_name: Ahmed Khan
-                          emergency_contact_phone: '+923001112222'
-                          address: House 12, Street 5, Karachi
-                          profile_complete: true
-                  summary: 200 OK
           description: ''
   /api/v1/accounts/me/patient-profile/:
     get:
@@ -1051,7 +1086,305 @@ paths:
                       is_accepting_patients: true
                   summary: 200 OK
           description: ''
+  /api/v1/accounts/patients/:
+    get:
+      operationId: accounts_patients_list
+      description: Admin sees every patient (optionally narrowed with `?doctor_id=`
+        to just that doctor's assigned patients). A doctor always sees only patients
+        assigned to them (derived from `PatientDoctorAssignment`, created automatically
+        the first time that patient books an appointment with them) — `?doctor_id=`
+        has no effect for a doctor caller. Forbidden for patients.
+      summary: List patients
+      parameters:
+      - in: query
+        name: doctor_id
+        schema:
+          type: integer
+        description: 'Admin only: narrow the list to patients assigned to this doctor.'
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPatientListList'
+              examples:
+                200OK:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - count: 1
+                      next: null
+                      previous: null
+                      results:
+                      - id: 2
+                        email: sara.ahmed@example.com
+                        first_name: Sara
+                        last_name: Ahmed
+                        phone_number: '+923001234567'
+                        is_active: true
+                        date_joined: '2026-01-15T10:30:00Z'
+                        patient_profile:
+                          date_of_birth: '1995-06-20'
+                          lmp_date: '2026-05-01'
+                          edd_date: null
+                          blood_group: O+
+                          emergency_contact_name: Ahmed Khan
+                          emergency_contact_phone: '+923001112222'
+                          address: House 12, Street 5, Karachi
+                          profile_complete: true
+                  summary: 200 OK
+          description: ''
+  /api/v1/accounts/patients/{id}/:
+    get:
+      operationId: accounts_patients_retrieve
+      description: Same scoping as list — a doctor gets 404 for a patient not assigned
+        to them.
+      summary: Get a single patient
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - Accounts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientList'
+              examples:
+                200OK:
+                  value:
+                    id: 2
+                    email: sara.ahmed@example.com
+                    first_name: Sara
+                    last_name: Ahmed
+                    phone_number: '+923001234567'
+                    is_active: true
+                    date_joined: '2026-01-15T10:30:00Z'
+                    patient_profile:
+                      date_of_birth: '1995-06-20'
+                      lmp_date: '2026-05-01'
+                      edd_date: null
+                      blood_group: O+
+                      emergency_contact_name: Ahmed Khan
+                      emergency_contact_phone: '+923001112222'
+                      address: House 12, Street 5, Karachi
+                      profile_complete: true
+                  summary: 200 OK
+          description: ''
+    patch:
+      operationId: accounts_patients_partial_update
+      description: 'Admin-only. Typically used to deactivate a patient (`is_active:
+        false`) rather than delete — there is no delete endpoint, deactivation preserves
+        their clinical history.'
+      summary: Update a patient (admin only)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - Accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPatientUpdateRequest'
+            examples:
+              Request—Deactivate:
+                value:
+                  is_active: false
+                summary: Request — deactivate
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPatientUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPatientUpdateRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientUpdate'
+              examples:
+                200OK:
+                  value:
+                    id: 2
+                    email: sara.ahmed@example.com
+                    first_name: Sara
+                    last_name: Ahmed
+                    phone_number: '+923001234567'
+                    is_active: true
+                    date_joined: '2026-01-15T10:30:00Z'
+                    patient_profile:
+                      date_of_birth: '1995-06-20'
+                      lmp_date: '2026-05-01'
+                      edd_date: null
+                      blood_group: O+
+                      emergency_contact_name: Ahmed Khan
+                      emergency_contact_phone: '+923001112222'
+                      address: House 12, Street 5, Karachi
+                      profile_complete: true
+                  summary: 200 OK
+          description: ''
+  /api/v1/accounts/patients/{id}/assign-doctor/:
+    post:
+      operationId: accounts_patients_assign_doctor_create
+      description: Manually creates a `PatientDoctorAssignment` — the same access-control
+        row that's normally created automatically when a patient books an appointment
+        with a doctor. Idempotent (assigning the same doctor twice is a no-op). Use
+        this to give a doctor access to a patient's records before any appointment
+        exists.
+      summary: Assign a doctor to a patient (admin only)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this user.
+        required: true
+      tags:
+      - Accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatientAssignDoctorRequest'
+            examples:
+              Request:
+                value:
+                  doctor_id: 4
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatientAssignDoctorRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatientAssignDoctorRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailResponse'
+              examples:
+                200OK:
+                  value:
+                    detail: Dr. Ayesha Malik assigned to this patient.
+                  summary: 200 OK
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailResponse'
+          description: ''
   /api/v1/appointments/:
+    get:
+      operationId: appointments_list
+      description: 'Role-scoped: patient sees only their own; doctor sees only their
+        own (not other doctors'' appointments with a shared patient) — `?patient_id=`/`?doctor_id=`
+        have no effect for a doctor caller. Admin sees all, optionally narrowed with
+        `?patient_id=` and/or `?doctor_id=`. Paginated.'
+      summary: List appointments
+      parameters:
+      - in: query
+        name: doctor_id
+        schema:
+          type: integer
+        description: 'Admin only: narrow to one doctor''s appointments.'
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: patient_id
+        schema:
+          type: integer
+        description: 'Admin only: narrow to one patient''s appointment history.'
+      tags:
+      - Appointments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAppointmentList'
+              examples:
+                200OK:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - count: 1
+                      next: null
+                      previous: null
+                      results:
+                      - id: 15
+                        patient:
+                          id: 2
+                          email: sara.ahmed@example.com
+                          first_name: Sara
+                          last_name: Ahmed
+                        doctor:
+                          id: 4
+                          email: dr.ayesha@example.com
+                          first_name: Ayesha
+                          last_name: Malik
+                        appointment_type: in_person
+                        scheduled_at: '2026-08-05T10:30:00Z'
+                        duration_minutes: 30
+                        status: pending
+                        meeting_link: ''
+                        reason: Routine 20-week checkup
+                        doctor_notes: ''
+                        cancellation_reason: ''
+                        created_at: '2026-07-29T14:00:00Z'
+                        updated_at: '2026-07-29T14:00:00Z'
+                  summary: 200 OK
+          description: ''
     post:
       operationId: appointments_create
       description: Patients book for themselves — any `patient_id` in the payload
@@ -1139,69 +1472,6 @@ paths:
                       patient_id:
                       - Required when booking on behalf of a patient.
                   summary: 400 Missing patient_id (non-patient actor)
-          description: ''
-    get:
-      operationId: appointments_list
-      description: 'Role-scoped: patient sees only their own; doctor sees only their
-        own (not other doctors'' appointments with a shared patient); admin sees all.
-        Paginated.'
-      summary: List appointments
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - Appointments
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedAppointmentList'
-              examples:
-                200OK:
-                  value:
-                    count: 123
-                    next: http://api.example.org/accounts/?page=4
-                    previous: http://api.example.org/accounts/?page=2
-                    results:
-                    - count: 1
-                      next: null
-                      previous: null
-                      results:
-                      - id: 15
-                        patient:
-                          id: 2
-                          email: sara.ahmed@example.com
-                          first_name: Sara
-                          last_name: Ahmed
-                        doctor:
-                          id: 4
-                          email: dr.ayesha@example.com
-                          first_name: Ayesha
-                          last_name: Malik
-                        appointment_type: in_person
-                        scheduled_at: '2026-08-05T10:30:00Z'
-                        duration_minutes: 30
-                        status: pending
-                        meeting_link: ''
-                        reason: Routine 20-week checkup
-                        doctor_notes: ''
-                        cancellation_reason: ''
-                        created_at: '2026-07-29T14:00:00Z'
-                        updated_at: '2026-07-29T14:00:00Z'
-                  summary: 200 OK
           description: ''
   /api/v1/appointments/{id}/:
     get:
@@ -1358,6 +1628,85 @@ paths:
                     updated_at: '2026-07-29T14:00:00Z'
                   summary: 200 OK
           description: ''
+  /api/v1/appointments/{id}/reschedule/:
+    patch:
+      operationId: appointments_reschedule_partial_update
+      description: 'Changes `scheduled_at` (and optionally `duration_minutes`) without
+        going through the status state machine — status is untouched. Only allowed
+        while `pending` or `confirmed` (400 for a terminal-status appointment: completed/cancelled/no_show).
+        Notifies whichever party didn''t make the change (or both, if an admin made
+        it), same as `/status/`.'
+      summary: Reschedule an appointment
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this appointment.
+        required: true
+      tags:
+      - Appointments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAppointmentRescheduleRequest'
+            examples:
+              Request:
+                value:
+                  scheduled_at: '2026-08-10T14:00:00Z'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAppointmentRescheduleRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAppointmentRescheduleRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+              examples:
+                200OK:
+                  value:
+                    id: 15
+                    patient:
+                      id: 2
+                      email: sara.ahmed@example.com
+                      first_name: Sara
+                      last_name: Ahmed
+                    doctor:
+                      id: 4
+                      email: dr.ayesha@example.com
+                      first_name: Ayesha
+                      last_name: Malik
+                    appointment_type: in_person
+                    scheduled_at: '2026-08-05T10:30:00Z'
+                    duration_minutes: 30
+                    status: pending
+                    meeting_link: ''
+                    reason: Routine 20-week checkup
+                    doctor_notes: ''
+                    cancellation_reason: ''
+                    created_at: '2026-07-29T14:00:00Z'
+                    updated_at: '2026-07-29T14:00:00Z'
+                  summary: 200 OK
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailResponse'
+              examples:
+                400TerminalStatus:
+                  value:
+                    detail: Cannot reschedule a completed appointment.
+                    errors: null
+                  summary: 400 Terminal status
+          description: ''
   /api/v1/appointments/{id}/status/:
     post:
       operationId: appointments_status_create
@@ -1488,6 +1837,59 @@ paths:
                   summary: 404 LMP not set
           description: ''
   /api/v1/health/blood-pressure/:
+    get:
+      operationId: health_blood_pressure_list
+      description: 'Role-scoped: patient''s own, or an assigned doctor''s/admin''s
+        view of a patient''s readings.'
+      summary: List blood pressure readings
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBloodPressureReadingList'
+              examples:
+                200OK:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - count: 1
+                      next: null
+                      previous: null
+                      results:
+                      - id: 31
+                        patient:
+                          id: 2
+                          email: sara.ahmed@example.com
+                          first_name: Sara
+                          last_name: Ahmed
+                        systolic: 118
+                        diastolic: 76
+                        pulse: 72
+                        recorded_at: '2026-07-29T09:00:00Z'
+                        notes: Felt fine
+                        created_at: '2026-07-29T09:00:00Z'
+                  summary: 200 OK
+          description: ''
     post:
       operationId: health_blood_pressure_create
       description: Patients create/edit their own records (any `patient_id` in the
@@ -1542,26 +1944,43 @@ paths:
                     created_at: '2026-07-29T09:00:00Z'
                   summary: 201 Created
           description: ''
-    get:
-      operationId: health_blood_pressure_list
-      description: 'Role-scoped: patient''s own, or an assigned doctor''s/admin''s
-        view of a patient''s readings.'
-      summary: List blood pressure readings
+  /api/v1/health/blood-pressure/{id}/:
+    patch:
+      operationId: health_blood_pressure_partial_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Update a blood pressure reading
       parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
+      - in: path
+        name: id
         schema:
           type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
+        description: A unique integer value identifying this blood pressure reading.
+        required: true
       tags:
       - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
+            examples:
+              Request:
+                value:
+                  notes: Slightly elevated, will recheck tomorrow
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
       security:
       - jwtAuth: []
       responses:
@@ -1569,33 +1988,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedBloodPressureReadingList'
-              examples:
-                200OK:
-                  value:
-                    count: 123
-                    next: http://api.example.org/accounts/?page=4
-                    previous: http://api.example.org/accounts/?page=2
-                    results:
-                    - count: 1
-                      next: null
-                      previous: null
-                      results:
-                      - id: 31
-                        patient:
-                          id: 2
-                          email: sara.ahmed@example.com
-                          first_name: Sara
-                          last_name: Ahmed
-                        systolic: 118
-                        diastolic: 76
-                        pulse: 72
-                        recorded_at: '2026-07-29T09:00:00Z'
-                        notes: Felt fine
-                        created_at: '2026-07-29T09:00:00Z'
-                  summary: 200 OK
+                $ref: '#/components/schemas/BloodPressureReading'
           description: ''
-  /api/v1/health/blood-pressure/{id}/:
     get:
       operationId: health_blood_pressure_retrieve
       description: |-
@@ -1603,7 +1997,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: Get a single blood pressure reading
       parameters:
       - in: path
@@ -1639,71 +2036,6 @@ paths:
                     created_at: '2026-07-29T09:00:00Z'
                   summary: 200 OK
           description: ''
-    patch:
-      operationId: health_blood_pressure_partial_update
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: Update a blood pressure reading
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this blood pressure reading.
-        required: true
-      tags:
-      - Health
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
-            examples:
-              Request:
-                value:
-                  notes: Slightly elevated, will recheck tomorrow
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BloodPressureReading'
-          description: ''
-    delete:
-      operationId: health_blood_pressure_destroy
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: Delete a blood pressure reading
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this blood pressure reading.
-        required: true
-      tags:
-      - Health
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: health_blood_pressure_update
       description: |-
@@ -1711,7 +2043,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: Replace a blood pressure reading
       parameters:
       - in: path
@@ -1743,7 +2078,92 @@ paths:
               schema:
                 $ref: '#/components/schemas/BloodPressureReading'
           description: ''
+    delete:
+      operationId: health_blood_pressure_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Delete a blood pressure reading
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood pressure reading.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/health/blood-sugar/:
+    get:
+      operationId: health_blood_sugar_list
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: List blood sugar readings
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBloodSugarReadingList'
+              examples:
+                200OK:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - count: 1
+                      next: null
+                      previous: null
+                      results:
+                      - id: 18
+                        patient:
+                          id: 2
+                          email: sara.ahmed@example.com
+                          first_name: Sara
+                          last_name: Ahmed
+                        value_mg_dl: 95
+                        reading_context: fasting
+                        recorded_at: '2026-07-29T07:15:00Z'
+                        notes: ''
+                        created_at: '2026-07-29T07:15:00Z'
+                  summary: 200 OK
+          description: ''
     post:
       operationId: health_blood_sugar_create
       description: Patients create/edit their own records (any `patient_id` in the
@@ -1796,105 +2216,7 @@ paths:
                     created_at: '2026-07-29T07:15:00Z'
                   summary: 201 Created
           description: ''
-    get:
-      operationId: health_blood_sugar_list
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: List blood sugar readings
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - Health
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedBloodSugarReadingList'
-              examples:
-                200OK:
-                  value:
-                    count: 123
-                    next: http://api.example.org/accounts/?page=4
-                    previous: http://api.example.org/accounts/?page=2
-                    results:
-                    - count: 1
-                      next: null
-                      previous: null
-                      results:
-                      - id: 18
-                        patient:
-                          id: 2
-                          email: sara.ahmed@example.com
-                          first_name: Sara
-                          last_name: Ahmed
-                        value_mg_dl: 95
-                        reading_context: fasting
-                        recorded_at: '2026-07-29T07:15:00Z'
-                        notes: ''
-                        created_at: '2026-07-29T07:15:00Z'
-                  summary: 200 OK
-          description: ''
   /api/v1/health/blood-sugar/{id}/:
-    get:
-      operationId: health_blood_sugar_retrieve
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: Get a single blood sugar reading
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this blood sugar reading.
-        required: true
-      tags:
-      - Health
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BloodSugarReading'
-              examples:
-                200OK:
-                  value:
-                    id: 18
-                    patient:
-                      id: 2
-                      email: sara.ahmed@example.com
-                      first_name: Sara
-                      last_name: Ahmed
-                    value_mg_dl: 95
-                    reading_context: fasting
-                    recorded_at: '2026-07-29T07:15:00Z'
-                    notes: ''
-                    created_at: '2026-07-29T07:15:00Z'
-                  summary: 200 OK
-          description: ''
     patch:
       operationId: health_blood_sugar_partial_update
       description: |-
@@ -1902,7 +2224,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: Update a blood sugar reading
       parameters:
       - in: path
@@ -1937,15 +2262,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/BloodSugarReading'
           description: ''
-    delete:
-      operationId: health_blood_sugar_destroy
+    get:
+      operationId: health_blood_sugar_retrieve
       description: |-
         Scopes a viewset's queryset by the requesting user's role, for any model
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: Delete a blood sugar reading
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Get a single blood sugar reading
       parameters:
       - in: path
         name: id
@@ -1958,8 +2286,27 @@ paths:
       security:
       - jwtAuth: []
       responses:
-        '204':
-          description: No response body
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodSugarReading'
+              examples:
+                200OK:
+                  value:
+                    id: 18
+                    patient:
+                      id: 2
+                      email: sara.ahmed@example.com
+                      first_name: Sara
+                      last_name: Ahmed
+                    value_mg_dl: 95
+                    reading_context: fasting
+                    recorded_at: '2026-07-29T07:15:00Z'
+                    notes: ''
+                    created_at: '2026-07-29T07:15:00Z'
+                  summary: 200 OK
+          description: ''
     put:
       operationId: health_blood_sugar_update
       description: |-
@@ -1967,7 +2314,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: Replace a blood sugar reading
       parameters:
       - in: path
@@ -1999,7 +2349,88 @@ paths:
               schema:
                 $ref: '#/components/schemas/BloodSugarReading'
           description: ''
+    delete:
+      operationId: health_blood_sugar_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Delete a blood sugar reading
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood sugar reading.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/health/symptoms/:
+    get:
+      operationId: health_symptoms_list
+      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
+      summary: List symptom logs
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSymptomLogList'
+              examples:
+                200OK:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - count: 1
+                      next: null
+                      previous: null
+                      results:
+                      - id: 9
+                        patient:
+                          id: 2
+                          email: sara.ahmed@example.com
+                          first_name: Sara
+                          last_name: Ahmed
+                        log_date: '2026-07-29'
+                        symptoms:
+                        - id: 1
+                          name: Nausea
+                        - id: 4
+                          name: Headache
+                        notes: Mild headache in the evening
+                        created_at: '2026-07-29T20:00:00Z'
+                        updated_at: '2026-07-29T20:00:00Z'
+                  summary: 200 OK
+          description: ''
     post:
       operationId: health_symptoms_create
       description: '**Upserts by (patient, log_date)** — POSTing again for a date
@@ -2059,25 +2490,38 @@ paths:
                     updated_at: '2026-07-29T20:00:00Z'
                   summary: 201 Created
           description: ''
-    get:
-      operationId: health_symptoms_list
-      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
-      summary: List symptom logs
+  /api/v1/health/symptoms/{id}/:
+    patch:
+      operationId: health_symptoms_partial_update
+      description: Same upsert-shaped body as create — usually unnecessary since POSTing
+        again for the same date already upserts (see above).
+      summary: Update a symptom log
       parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
+      - in: path
+        name: id
         schema:
           type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
+        description: A unique integer value identifying this symptom log.
+        required: true
       tags:
       - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSymptomLogRequest'
+            examples:
+              Request:
+                value:
+                  symptom_ids:
+                  - 1
+                  notes: Nausea improved by evening
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSymptomLogRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSymptomLogRequest'
       security:
       - jwtAuth: []
       responses:
@@ -2085,36 +2529,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedSymptomLogList'
-              examples:
-                200OK:
-                  value:
-                    count: 123
-                    next: http://api.example.org/accounts/?page=4
-                    previous: http://api.example.org/accounts/?page=2
-                    results:
-                    - count: 1
-                      next: null
-                      previous: null
-                      results:
-                      - id: 9
-                        patient:
-                          id: 2
-                          email: sara.ahmed@example.com
-                          first_name: Sara
-                          last_name: Ahmed
-                        log_date: '2026-07-29'
-                        symptoms:
-                        - id: 1
-                          name: Nausea
-                        - id: 4
-                          name: Headache
-                        notes: Mild headache in the evening
-                        created_at: '2026-07-29T20:00:00Z'
-                        updated_at: '2026-07-29T20:00:00Z'
-                  summary: 200 OK
+                $ref: '#/components/schemas/SymptomLog'
           description: ''
-  /api/v1/health/symptoms/{id}/:
     get:
       operationId: health_symptoms_retrieve
       description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
@@ -2156,64 +2572,6 @@ paths:
                     updated_at: '2026-07-29T20:00:00Z'
                   summary: 200 OK
           description: ''
-    patch:
-      operationId: health_symptoms_partial_update
-      description: Same upsert-shaped body as create — usually unnecessary since POSTing
-        again for the same date already upserts (see above).
-      summary: Update a symptom log
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this symptom log.
-        required: true
-      tags:
-      - Health
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedSymptomLogRequest'
-            examples:
-              Request:
-                value:
-                  symptom_ids:
-                  - 1
-                  notes: Nausea improved by evening
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedSymptomLogRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedSymptomLogRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SymptomLog'
-          description: ''
-    delete:
-      operationId: health_symptoms_destroy
-      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
-      summary: Delete a symptom log
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this symptom log.
-        required: true
-      tags:
-      - Health
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: health_symptoms_update
       description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
@@ -2247,55 +2605,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/SymptomLog'
           description: ''
-  /api/v1/health/water-intake/:
-    post:
-      operationId: health_water_intake_create
-      description: 'Append-only — no update/delete endpoints. Each call adds one entry;
-        `log_date` defaults to today. ''Daily reset'' in the UI is purely a display
-        concept: use `GET /water-intake/today/` to get today''s running total, `GET
-        /water-intake/` for full history.'
-      summary: Log a water intake entry
+    delete:
+      operationId: health_symptoms_destroy
+      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
+      summary: Delete a symptom log
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this symptom log.
+        required: true
       tags:
       - Health
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WaterIntakeEntryRequest'
-            examples:
-              Request:
-                value:
-                  amount_ml: 250
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/WaterIntakeEntryRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/WaterIntakeEntryRequest'
-        required: true
       security:
       - jwtAuth: []
       responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WaterIntakeEntry'
-              examples:
-                201Created:
-                  value:
-                    id: 102
-                    patient:
-                      id: 2
-                      email: sara.ahmed@example.com
-                      first_name: Sara
-                      last_name: Ahmed
-                    amount_ml: 250
-                    logged_at: '2026-07-29T11:00:00Z'
-                    log_date: '2026-07-29'
-                    created_at: '2026-07-29T11:00:00Z'
-                  summary: 201 Created
-          description: ''
+        '204':
+          description: No response body
+  /api/v1/health/water-intake/:
     get:
       operationId: health_water_intake_list
       description: No update/delete — water intake is an append-only log; 'today'
@@ -2346,6 +2674,54 @@ paths:
                         log_date: '2026-07-29'
                         created_at: '2026-07-29T11:00:00Z'
                   summary: 200 OK
+          description: ''
+    post:
+      operationId: health_water_intake_create
+      description: 'Append-only — no update/delete endpoints. Each call adds one entry;
+        `log_date` defaults to today. ''Daily reset'' in the UI is purely a display
+        concept: use `GET /water-intake/today/` to get today''s running total, `GET
+        /water-intake/` for full history.'
+      summary: Log a water intake entry
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaterIntakeEntryRequest'
+            examples:
+              Request:
+                value:
+                  amount_ml: 250
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WaterIntakeEntryRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WaterIntakeEntryRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaterIntakeEntry'
+              examples:
+                201Created:
+                  value:
+                    id: 102
+                    patient:
+                      id: 2
+                      email: sara.ahmed@example.com
+                      first_name: Sara
+                      last_name: Ahmed
+                    amount_ml: 250
+                    logged_at: '2026-07-29T11:00:00Z'
+                    log_date: '2026-07-29'
+                    created_at: '2026-07-29T11:00:00Z'
+                  summary: 201 Created
           description: ''
   /api/v1/health/water-intake/today/:
     get:
@@ -2430,52 +2806,6 @@ paths:
                   summary: 200 OK
           description: ''
   /api/v1/health/kick-sessions/:
-    post:
-      operationId: health_kick_sessions_create
-      description: Starts a new session with `kick_count=0`. Follow up with `/tap/`
-        for each kick felt, then `/end/` when done.
-      summary: Start a kick-count session
-      tags:
-      - Health
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/KickCountSessionRequest'
-            examples:
-              Request:
-                value: {}
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/KickCountSessionRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/KickCountSessionRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/KickCountSession'
-              examples:
-                201Created:
-                  value:
-                    id: 7
-                    patient:
-                      id: 2
-                      email: sara.ahmed@example.com
-                      first_name: Sara
-                      last_name: Ahmed
-                    started_at: '2026-07-29T15:00:00Z'
-                    ended_at: null
-                    kick_count: 0
-                    log_date: '2026-07-29'
-                    events: []
-                    created_at: '2026-07-29T15:00:00Z'
-                  summary: 201 Created
-          description: ''
     get:
       operationId: health_kick_sessions_list
       description: |-
@@ -2483,7 +2813,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: List kick-count sessions (history)
       parameters:
       - name: page
@@ -2533,6 +2866,52 @@ paths:
                         created_at: '2026-07-29T15:00:00Z'
                   summary: 200 OK
           description: ''
+    post:
+      operationId: health_kick_sessions_create
+      description: Starts a new session with `kick_count=0`. Follow up with `/tap/`
+        for each kick felt, then `/end/` when done.
+      summary: Start a kick-count session
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+            examples:
+              Request:
+                value: {}
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/KickCountSessionRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KickCountSession'
+              examples:
+                201Created:
+                  value:
+                    id: 7
+                    patient:
+                      id: 2
+                      email: sara.ahmed@example.com
+                      first_name: Sara
+                      last_name: Ahmed
+                    started_at: '2026-07-29T15:00:00Z'
+                    ended_at: null
+                    kick_count: 0
+                    log_date: '2026-07-29'
+                    events: []
+                    created_at: '2026-07-29T15:00:00Z'
+                  summary: 201 Created
+          description: ''
   /api/v1/health/kick-sessions/{id}/:
     get:
       operationId: health_kick_sessions_retrieve
@@ -2541,7 +2920,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: Get a single kick-count session
       parameters:
       - in: path
@@ -2761,6 +3143,66 @@ paths:
                   summary: 200 OK
           description: ''
   /api/v1/health/surgical-procedures/:
+    get:
+      operationId: health_surgical_procedures_list
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: List surgical procedure records
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSurgicalProcedureRecordList'
+              examples:
+                200OK:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - count: 1
+                      next: null
+                      previous: null
+                      results:
+                      - id: 3
+                        patient:
+                          id: 2
+                          email: sara.ahmed@example.com
+                          first_name: Sara
+                          last_name: Ahmed
+                        procedure_name: C-Section
+                        procedure_date: '2024-03-10'
+                        hospital_name: City Maternity Hospital
+                        notes: Elective, no complications
+                        created_at: '2026-07-29T10:00:00Z'
+                        updated_at: '2026-07-29T10:00:00Z'
+                  summary: 200 OK
+          description: ''
     post:
       operationId: health_surgical_procedures_create
       description: Patients create/edit their own records (any `patient_id` in the
@@ -2814,30 +3256,43 @@ paths:
                     updated_at: '2026-07-29T10:00:00Z'
                   summary: 201 Created
           description: ''
-    get:
-      operationId: health_surgical_procedures_list
+  /api/v1/health/surgical-procedures/{id}/:
+    patch:
+      operationId: health_surgical_procedures_partial_update
       description: |-
         Scopes a viewset's queryset by the requesting user's role, for any model
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: List surgical procedure records
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Update a surgical procedure record
       parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
+      - in: path
+        name: id
         schema:
           type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
+        description: A unique integer value identifying this surgical procedure record.
+        required: true
       tags:
       - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
+            examples:
+              Request:
+                value:
+                  notes: Follow-up scan showed full recovery
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
       security:
       - jwtAuth: []
       responses:
@@ -2845,33 +3300,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedSurgicalProcedureRecordList'
-              examples:
-                200OK:
-                  value:
-                    count: 123
-                    next: http://api.example.org/accounts/?page=4
-                    previous: http://api.example.org/accounts/?page=2
-                    results:
-                    - count: 1
-                      next: null
-                      previous: null
-                      results:
-                      - id: 3
-                        patient:
-                          id: 2
-                          email: sara.ahmed@example.com
-                          first_name: Sara
-                          last_name: Ahmed
-                        procedure_name: C-Section
-                        procedure_date: '2024-03-10'
-                        hospital_name: City Maternity Hospital
-                        notes: Elective, no complications
-                        created_at: '2026-07-29T10:00:00Z'
-                        updated_at: '2026-07-29T10:00:00Z'
-                  summary: 200 OK
+                $ref: '#/components/schemas/SurgicalProcedureRecord'
           description: ''
-  /api/v1/health/surgical-procedures/{id}/:
     get:
       operationId: health_surgical_procedures_retrieve
       description: |-
@@ -2879,7 +3309,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: Get a single surgical procedure record
       parameters:
       - in: path
@@ -2915,71 +3348,6 @@ paths:
                     updated_at: '2026-07-29T10:00:00Z'
                   summary: 200 OK
           description: ''
-    patch:
-      operationId: health_surgical_procedures_partial_update
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: Update a surgical procedure record
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this surgical procedure record.
-        required: true
-      tags:
-      - Health
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
-            examples:
-              Request:
-                value:
-                  notes: Follow-up scan showed full recovery
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SurgicalProcedureRecord'
-          description: ''
-    delete:
-      operationId: health_surgical_procedures_destroy
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: Delete a surgical procedure record
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this surgical procedure record.
-        required: true
-      tags:
-      - Health
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: health_surgical_procedures_update
       description: |-
@@ -2987,7 +3355,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: Replace a surgical procedure record
       parameters:
       - in: path
@@ -3019,6 +3390,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/SurgicalProcedureRecord'
           description: ''
+    delete:
+      operationId: health_surgical_procedures_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Delete a surgical procedure record
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this surgical procedure record.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/health/exercise-videos/:
     get:
       operationId: health_exercise_videos_list
@@ -3112,6 +3509,74 @@ paths:
                   summary: 200 OK
           description: ''
   /api/v1/diet/plans/:
+    get:
+      operationId: diet_plans_list
+      description: 'Role-scoped: patient''s own plans (all history, active + inactive),
+        or an assigned doctor''s/admin''s view.'
+      summary: List diet plans
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Diet
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDietPlanList'
+              examples:
+                200OK:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - count: 1
+                      next: null
+                      previous: null
+                      results:
+                      - id: 5
+                        patient:
+                          id: 2
+                          email: sara.ahmed@example.com
+                          first_name: Sara
+                          last_name: Ahmed
+                        created_by:
+                          id: 4
+                          email: dr.ayesha@example.com
+                          first_name: Ayesha
+                          last_name: Malik
+                        is_active: true
+                        hydration_recommendation_ml: 2500
+                        notes: Increase iron-rich foods this trimester.
+                        meals:
+                        - id: 11
+                          meal_type: breakfast
+                          description: Oatmeal with fruit and a boiled egg
+                        - id: 12
+                          meal_type: lunch
+                          description: Grilled chicken, brown rice, steamed vegetables
+                        foods_to_avoid:
+                        - id: 6
+                          food_name: Raw fish
+                          reason: Food safety during pregnancy
+                        created_at: '2026-07-20T09:00:00Z'
+                        updated_at: '2026-07-20T09:00:00Z'
+                  summary: 200 OK
+          description: ''
     post:
       operationId: diet_plans_create
       description: Doctor/admin only — patients get 403 (diet plans are doctor-authored,
@@ -3187,74 +3652,6 @@ paths:
                     updated_at: '2026-07-20T09:00:00Z'
                   summary: 201 Created
           description: ''
-    get:
-      operationId: diet_plans_list
-      description: 'Role-scoped: patient''s own plans (all history, active + inactive),
-        or an assigned doctor''s/admin''s view.'
-      summary: List diet plans
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - Diet
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedDietPlanList'
-              examples:
-                200OK:
-                  value:
-                    count: 123
-                    next: http://api.example.org/accounts/?page=4
-                    previous: http://api.example.org/accounts/?page=2
-                    results:
-                    - count: 1
-                      next: null
-                      previous: null
-                      results:
-                      - id: 5
-                        patient:
-                          id: 2
-                          email: sara.ahmed@example.com
-                          first_name: Sara
-                          last_name: Ahmed
-                        created_by:
-                          id: 4
-                          email: dr.ayesha@example.com
-                          first_name: Ayesha
-                          last_name: Malik
-                        is_active: true
-                        hydration_recommendation_ml: 2500
-                        notes: Increase iron-rich foods this trimester.
-                        meals:
-                        - id: 11
-                          meal_type: breakfast
-                          description: Oatmeal with fruit and a boiled egg
-                        - id: 12
-                          meal_type: lunch
-                          description: Grilled chicken, brown rice, steamed vegetables
-                        foods_to_avoid:
-                        - id: 6
-                          food_name: Raw fish
-                          reason: Food safety during pregnancy
-                        created_at: '2026-07-20T09:00:00Z'
-                        updated_at: '2026-07-20T09:00:00Z'
-                  summary: 200 OK
-          description: ''
   /api/v1/diet/plans/active/:
     get:
       operationId: diet_plans_active_retrieve
@@ -3317,6 +3714,46 @@ paths:
                   summary: 404 No active plan
           description: ''
   /api/v1/diet/plans/{id}/:
+    patch:
+      operationId: diet_plans_partial_update
+      description: '`meals`/`foods_to_avoid`, if included, fully replace the existing
+        set (delete + recreate) — not merged/diffed. Omit them to leave meals/foods
+        untouched while updating other fields.'
+      summary: Update a diet plan (doctor/admin only)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this diet plan.
+        required: true
+      tags:
+      - Diet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDietPlanRequest'
+            examples:
+              Request—NotesOnly:
+                value:
+                  notes: Reduce salt intake — mild swelling noted.
+                summary: Request — notes only
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDietPlanRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDietPlanRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DietPlan'
+          description: ''
     get:
       operationId: diet_plans_retrieve
       description: Doctor/admin authored; patient is read-only (never creates/edits
@@ -3371,65 +3808,6 @@ paths:
                     updated_at: '2026-07-20T09:00:00Z'
                   summary: 200 OK
           description: ''
-    patch:
-      operationId: diet_plans_partial_update
-      description: '`meals`/`foods_to_avoid`, if included, fully replace the existing
-        set (delete + recreate) — not merged/diffed. Omit them to leave meals/foods
-        untouched while updating other fields.'
-      summary: Update a diet plan (doctor/admin only)
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this diet plan.
-        required: true
-      tags:
-      - Diet
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedDietPlanRequest'
-            examples:
-              Request—NotesOnly:
-                value:
-                  notes: Reduce salt intake — mild swelling noted.
-                summary: Request — notes only
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedDietPlanRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedDietPlanRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DietPlan'
-          description: ''
-    delete:
-      operationId: diet_plans_destroy
-      description: Doctor/admin authored; patient is read-only (never creates/edits
-        their own plan).
-      summary: Delete a diet plan (doctor/admin only)
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this diet plan.
-        required: true
-      tags:
-      - Diet
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: diet_plans_update
       description: Doctor/admin authored; patient is read-only (never creates/edits
@@ -3464,7 +3842,91 @@ paths:
               schema:
                 $ref: '#/components/schemas/DietPlan'
           description: ''
+    delete:
+      operationId: diet_plans_destroy
+      description: Doctor/admin authored; patient is read-only (never creates/edits
+        their own plan).
+      summary: Delete a diet plan (doctor/admin only)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this diet plan.
+        required: true
+      tags:
+      - Diet
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/medicines/reminders/:
+    get:
+      operationId: medicines_reminders_list
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: List medicine reminders
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Medicines
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMedicineReminderList'
+              examples:
+                200OK:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - count: 1
+                      next: null
+                      previous: null
+                      results:
+                      - id: 8
+                        patient:
+                          id: 2
+                          email: sara.ahmed@example.com
+                          first_name: Sara
+                          last_name: Ahmed
+                        medicine_name: Folic Acid
+                        dosage: 5mg
+                        times_per_day: 2
+                        reminder_times:
+                        - 08:00
+                        - '20:00'
+                        start_date: '2026-07-01'
+                        end_date: null
+                        is_active: true
+                        created_at: '2026-07-01T08:00:00Z'
+                        updated_at: '2026-07-01T08:00:00Z'
+                  summary: 200 OK
+          description: ''
     post:
       operationId: medicines_reminders_create
       description: Patient-owned — patients create their own (any `patient_id` sent
@@ -3529,30 +3991,36 @@ paths:
                     updated_at: '2026-07-01T08:00:00Z'
                   summary: 201 Created
           description: ''
-    get:
-      operationId: medicines_reminders_list
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: List medicine reminders
+  /api/v1/medicines/reminders/{id}/:
+    patch:
+      operationId: medicines_reminders_partial_update
+      description: 'E.g. `{"is_active": false}` to stop reminders without deleting
+        history.'
+      summary: Update a medicine reminder
       parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
+      - in: path
+        name: id
         schema:
           type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
+        description: A unique integer value identifying this medicine reminder.
+        required: true
       tags:
       - Medicines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
+            examples:
+              Request:
+                value:
+                  is_active: false
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
       security:
       - jwtAuth: []
       responses:
@@ -3560,38 +4028,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedMedicineReminderList'
-              examples:
-                200OK:
-                  value:
-                    count: 123
-                    next: http://api.example.org/accounts/?page=4
-                    previous: http://api.example.org/accounts/?page=2
-                    results:
-                    - count: 1
-                      next: null
-                      previous: null
-                      results:
-                      - id: 8
-                        patient:
-                          id: 2
-                          email: sara.ahmed@example.com
-                          first_name: Sara
-                          last_name: Ahmed
-                        medicine_name: Folic Acid
-                        dosage: 5mg
-                        times_per_day: 2
-                        reminder_times:
-                        - 08:00
-                        - '20:00'
-                        start_date: '2026-07-01'
-                        end_date: null
-                        is_active: true
-                        created_at: '2026-07-01T08:00:00Z'
-                        updated_at: '2026-07-01T08:00:00Z'
-                  summary: 200 OK
+                $ref: '#/components/schemas/MedicineReminder'
           description: ''
-  /api/v1/medicines/reminders/{id}/:
     get:
       operationId: medicines_reminders_retrieve
       description: |-
@@ -3599,7 +4037,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: Get a single medicine reminder
       parameters:
       - in: path
@@ -3640,67 +4081,6 @@ paths:
                     updated_at: '2026-07-01T08:00:00Z'
                   summary: 200 OK
           description: ''
-    patch:
-      operationId: medicines_reminders_partial_update
-      description: 'E.g. `{"is_active": false}` to stop reminders without deleting
-        history.'
-      summary: Update a medicine reminder
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this medicine reminder.
-        required: true
-      tags:
-      - Medicines
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
-            examples:
-              Request:
-                value:
-                  is_active: false
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MedicineReminder'
-          description: ''
-    delete:
-      operationId: medicines_reminders_destroy
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
-      summary: Delete a medicine reminder
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this medicine reminder.
-        required: true
-      tags:
-      - Medicines
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: medicines_reminders_update
       description: |-
@@ -3708,7 +4088,10 @@ paths:
         with a FK to the patient (default field name "patient"):
           - PATIENT: only their own records
           - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
       summary: Replace a medicine reminder
       parameters:
       - in: path
@@ -3740,6 +4123,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/MedicineReminder'
           description: ''
+    delete:
+      operationId: medicines_reminders_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Delete a medicine reminder
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this medicine reminder.
+        required: true
+      tags:
+      - Medicines
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/medicines/reminders/{id}/log-intake/:
     post:
       operationId: medicines_reminders_log_intake_create
@@ -4230,48 +4639,6 @@ paths:
                   summary: 503 Not configured / upstream failure
           description: ''
   /api/v1/ai/sessions/:
-    post:
-      operationId: ai_sessions_create
-      description: Patient-only (the AI Assistant is a Patient App feature). `language`
-        (`en`|`ur`) is set once per session and passed to the AI provider as a system-prompt
-        instruction — it is not a separate translation step, and cannot be changed
-        mid-session (start a new session to switch).
-      summary: Start a new chat session
-      tags:
-      - AI Assistant
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ChatSessionRequest'
-            examples:
-              Request:
-                value:
-                  language: en
-                  title: Third trimester questions
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ChatSessionRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ChatSessionRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ChatSession'
-              examples:
-                201Created:
-                  value:
-                    id: 6
-                    language: en
-                    title: Third trimester questions
-                    created_at: '2026-07-29T12:00:00Z'
-                  summary: 201 Created
-          description: ''
     get:
       operationId: ai_sessions_list
       description: Patient-only — the AI Pregnancy Assistant is a Patient App feature
@@ -4317,6 +4684,48 @@ paths:
                         created_at: '2026-07-29T12:00:00Z'
                   summary: 200 OK
           description: ''
+    post:
+      operationId: ai_sessions_create
+      description: Patient-only (the AI Assistant is a Patient App feature). `language`
+        (`en`|`ur`) is set once per session and passed to the AI provider as a system-prompt
+        instruction — it is not a separate translation step, and cannot be changed
+        mid-session (start a new session to switch).
+      summary: Start a new chat session
+      tags:
+      - AI Assistant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatSessionRequest'
+            examples:
+              Request:
+                value:
+                  language: en
+                  title: Third trimester questions
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChatSessionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChatSessionRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSession'
+              examples:
+                201Created:
+                  value:
+                    id: 6
+                    language: en
+                    title: Third trimester questions
+                    created_at: '2026-07-29T12:00:00Z'
+                  summary: 201 Created
+          description: ''
   /api/v1/ai/sessions/{id}/:
     get:
       operationId: ai_sessions_retrieve
@@ -4350,8 +4759,8 @@ paths:
                   summary: 200 OK
           description: ''
   /api/v1/ai/sessions/{id}/messages/:
-    post:
-      operationId: ai_sessions_messages_create
+    get:
+      operationId: ai_sessions_messages_list
       description: '**GET**: full message history for this session, chronological.
         **POST**: send a patient message — persists it, calls the configured AI provider
         (OpenAI or Gemini, whichever `AI_PROVIDER` is set to) with recent context
@@ -4383,23 +4792,6 @@ paths:
           type: integer
       tags:
       - AI Assistant
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SendMessageRequest'
-            examples:
-              POSTRequest:
-                value:
-                  content: Is it normal to feel more tired in the third trimester?
-                summary: POST request
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/SendMessageRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/SendMessageRequest'
-        required: true
       security:
       - jwtAuth: []
       responses:
@@ -4454,8 +4846,8 @@ paths:
                     errors: null
                   summary: 503 AI provider not configured
           description: ''
-    get:
-      operationId: ai_sessions_messages_list
+    post:
+      operationId: ai_sessions_messages_create
       description: '**GET**: full message history for this session, chronological.
         **POST**: send a patient message — persists it, calls the configured AI provider
         (OpenAI or Gemini, whichever `AI_PROVIDER` is set to) with recent context
@@ -4487,6 +4879,23 @@ paths:
           type: integer
       tags:
       - AI Assistant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+            examples:
+              POSTRequest:
+                value:
+                  content: Is it normal to feel more tired in the third trimester?
+                summary: POST request
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+        required: true
       security:
       - jwtAuth: []
       responses:
@@ -4670,9 +5079,14 @@ paths:
     get:
       operationId: reports_admin_stats_retrieve
       description: Admin-only. Counts only — no PDF/export, that's explicitly out
-        of v1 scope. `appointments_this_month` is calendar-month-to-date; `new_patients_this_week`
-        is a trailing 7 days.
-      summary: System-wide statistics (admin only)
+        of v1 scope. `appointments_this_month` is calendar-month-to-date; `today_appointments`
+        is today only; `new_patients_this_week` is a trailing 7 days. `trimester_distribution`
+        counts every patient with an LMP date set, bucketed by current trimester (`unknown`
+        = patients with a profile but no LMP date yet, e.g. not yet completed onboarding).
+        `recent_activities` is a computed-on-read feed (not a stored log) of the most
+        recent patient registrations, appointment bookings, and SOS triggers, newest
+        first.
+      summary: System-wide statistics / dashboard (admin only)
       tags:
       - Reports
       security:
@@ -4690,11 +5104,145 @@ paths:
                     total_doctors: 9
                     total_appointments: 342
                     appointments_this_month: 47
+                    today_appointments: 5
                     active_sos_events: 0
                     new_patients_this_week: 6
+                    trimester_distribution:
+                      trimester_1: 30
+                      trimester_2: 44
+                      trimester_3: 40
+                      unknown: 14
+                    recent_activities:
+                    - type: sos_triggered
+                      description: Sara Ahmed triggered an emergency SOS.
+                      timestamp: '2026-07-29T16:00:00Z'
+                    - type: appointment_booked
+                      description: Sara Ahmed booked an appointment with Dr. Ayesha
+                        Malik.
+                      timestamp: '2026-07-29T14:00:00Z'
+                    - type: patient_registered
+                      description: Sara Ahmed registered as a patient.
+                      timestamp: '2026-01-15T10:30:00Z'
                   summary: 200 OK
           description: ''
+  /api/v1/reports/search/:
+    get:
+      operationId: reports_search_retrieve
+      description: Simple case-insensitive substring match — not full-text search.
+        Doctors/patients matched by name or email; appointments matched by patient/doctor
+        name-or-email or the free-text `reason` field. Each category capped at 10
+        results; not paginated.
+      summary: Global search across doctors, patients, and appointments (admin only)
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Search term, minimum 2 characters.
+        required: true
+      tags:
+      - Reports
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResults'
+              examples:
+                200OK:
+                  value:
+                    doctors:
+                    - id: 4
+                      email: dr.ayesha@example.com
+                      first_name: Ayesha
+                      last_name: Malik
+                      phone_number: '+923009876543'
+                      is_active: true
+                      date_joined: '2026-01-10T09:00:00Z'
+                      doctor_profile:
+                        specialization: OB-GYN
+                        license_number: PMC-12345
+                        years_of_experience: 8
+                        bio: ''
+                        is_accepting_patients: true
+                    patients: []
+                    appointments: []
+                  summary: 200 OK
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailResponse'
+              examples:
+                400QueryTooShort:
+                  value:
+                    detail: Search term must be at least 2 characters.
+                    errors: null
+                  summary: 400 Query too short
+          description: ''
   /api/v1/emergency/sos/:
+    get:
+      operationId: emergency_sos_list
+      description: 'Role-scoped: patient''s own; assigned doctor''s/admin''s view
+        (admin can also narrow to one patient with `?patient_id=`). Filter to just
+        active events with `?status=active`.'
+      summary: List SOS events
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: 'Filter by status: active, resolved, or false_alarm.'
+      tags:
+      - Emergency
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEmergencySOSEventList'
+              examples:
+                200OK:
+                  value:
+                    count: 123
+                    next: http://api.example.org/accounts/?page=4
+                    previous: http://api.example.org/accounts/?page=2
+                    results:
+                    - count: 1
+                      next: null
+                      previous: null
+                      results:
+                      - id: 3
+                        patient:
+                          id: 2
+                          email: sara.ahmed@example.com
+                          first_name: Sara
+                          last_name: Ahmed
+                        latitude: '24.860700'
+                        longitude: '67.009900'
+                        status: active
+                        resolved_at: null
+                        notes: ''
+                        created_at: '2026-07-29T16:00:00Z'
+                  summary: 200 OK
+          description: ''
     post:
       operationId: emergency_sos_create
       description: '**Patient-only** — unlike every other clinical endpoint, a doctor/admin
@@ -4750,58 +5298,6 @@ paths:
                     notes: ''
                     created_at: '2026-07-29T16:00:00Z'
                   summary: 201 Created
-          description: ''
-    get:
-      operationId: emergency_sos_list
-      description: 'Role-scoped: patient''s own; assigned doctor''s/admin''s view.'
-      summary: List SOS events
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - Emergency
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedEmergencySOSEventList'
-              examples:
-                200OK:
-                  value:
-                    count: 123
-                    next: http://api.example.org/accounts/?page=4
-                    previous: http://api.example.org/accounts/?page=2
-                    results:
-                    - count: 1
-                      next: null
-                      previous: null
-                      results:
-                      - id: 3
-                        patient:
-                          id: 2
-                          email: sara.ahmed@example.com
-                          first_name: Sara
-                          last_name: Ahmed
-                        latitude: '24.860700'
-                        longitude: '67.009900'
-                        status: active
-                        resolved_at: null
-                        notes: ''
-                        created_at: '2026-07-29T16:00:00Z'
-                  summary: 200 OK
           description: ''
   /api/v1/emergency/sos/{id}/:
     get:
@@ -4920,17 +5416,28 @@ components:
           type: integer
         appointments_this_month:
           type: integer
+        today_appointments:
+          type: integer
         active_sos_events:
           type: integer
         new_patients_this_week:
           type: integer
+        trimester_distribution:
+          $ref: '#/components/schemas/TrimesterDistribution'
+        recent_activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentActivity'
       required:
       - active_sos_events
       - appointments_this_month
       - new_patients_this_week
+      - recent_activities
+      - today_appointments
       - total_appointments
       - total_doctors
       - total_patients
+      - trimester_distribution
     Appointment:
       type: object
       properties:
@@ -5923,6 +6430,20 @@ components:
         * `patient` - Patient
         * `doctor` - Doctor
         * `admin` - Admin
+    MeUpdate:
+      type: object
+      description: Writable subset of MeSerializer — email/role/is_email_verified
+        are never editable here.
+      properties:
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone_number:
+          type: string
+          maxLength: 20
     MealTypeEnum:
       enum:
       - breakfast
@@ -6598,6 +7119,31 @@ components:
       required:
       - new_password
       - token
+    PasswordVerifyOTPRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        otp_code:
+          type: string
+          minLength: 6
+          maxLength: 6
+      required:
+      - email
+      - otp_code
+    PasswordVerifyOTPResponse:
+      type: object
+      description: Schema-only, for Swagger — the view builds this response dict itself.
+      properties:
+        detail:
+          type: string
+        reset_token:
+          type: string
+      required:
+      - detail
+      - reset_token
     PatchedAppointmentDoctorNotesRequest:
       type: object
       properties:
@@ -6625,6 +7171,15 @@ components:
           type: string
         doctor_notes:
           type: string
+    PatchedAppointmentRescheduleRequest:
+      type: object
+      properties:
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          minimum: 1
     PatchedBloodPressureReadingRequest:
       type: object
       description: |-
@@ -6742,6 +7297,20 @@ components:
           maxLength: 20
         doctor_profile:
           $ref: '#/components/schemas/DoctorProfileRequest'
+    PatchedMeUpdateRequest:
+      type: object
+      description: Writable subset of MeSerializer — email/role/is_email_verified
+        are never editable here.
+      properties:
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone_number:
+          type: string
+          maxLength: 20
     PatchedMedicineReminderRequest:
       type: object
       description: |-
@@ -6804,6 +7373,25 @@ components:
           maxLength: 20
         address:
           type: string
+    PatchedPatientUpdateRequest:
+      type: object
+      properties:
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone_number:
+          type: string
+          maxLength: 20
+        patient_profile:
+          $ref: '#/components/schemas/PatientProfileRequest'
     PatchedSurgicalProcedureRecordRequest:
       type: object
       description: |-
@@ -6849,6 +7437,13 @@ components:
             type: integer
         notes:
           type: string
+    PatientAssignDoctorRequest:
+      type: object
+      properties:
+        doctor_id:
+          type: integer
+      required:
+      - doctor_id
     PatientList:
       type: object
       properties:
@@ -6868,6 +7463,11 @@ components:
         phone_number:
           type: string
           maxLength: 20
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
         date_joined:
           type: string
           format: date-time
@@ -6977,6 +7577,25 @@ components:
       - pregnancy_progress
       - recent_symptoms
       - upcoming_appointments
+    PatientUpdate:
+      type: object
+      properties:
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        phone_number:
+          type: string
+          maxLength: 20
+        patient_profile:
+          $ref: '#/components/schemas/PatientProfile'
     PregnancyProgress:
       type: object
       properties:
@@ -7015,6 +7634,20 @@ components:
         * `fasting` - Fasting
         * `post_meal` - Post-meal
         * `random` - Random
+    RecentActivity:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+        description:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+      required:
+      - description
+      - timestamp
+      - type
     RegisterRequest:
       type: object
       properties:
@@ -7070,6 +7703,25 @@ components:
       description: |-
         * `resolved` - resolved
         * `false_alarm` - false_alarm
+    SearchResults:
+      type: object
+      properties:
+        doctors:
+          type: array
+          items:
+            $ref: '#/components/schemas/DoctorList'
+        patients:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatientList'
+        appointments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Appointment'
+      required:
+      - appointments
+      - doctors
+      - patients
     SendMessageRequest:
       type: object
       properties:
@@ -7269,6 +7921,33 @@ components:
           minLength: 1
       required:
       - refresh
+    TrimesterDistribution:
+      type: object
+      properties:
+        trimester_1:
+          type: integer
+        trimester_2:
+          type: integer
+        trimester_3:
+          type: integer
+        unknown:
+          type: integer
+          description: Patients with a profile but no LMP date set yet.
+      required:
+      - trimester_1
+      - trimester_2
+      - trimester_3
+      - unknown
+    TypeEnum:
+      enum:
+      - patient_registered
+      - appointment_booked
+      - sos_triggered
+      type: string
+      description: |-
+        * `patient_registered` - patient_registered
+        * `appointment_booked` - appointment_booked
+        * `sos_triggered` - sos_triggered
     VerifyEmailRequest:
       type: object
       properties:

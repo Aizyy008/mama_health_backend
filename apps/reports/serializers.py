@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.accounts.serializers import DoctorListSerializer, PatientListSerializer
 from apps.appointments.serializers import AppointmentSerializer
 from apps.diet.serializers import DietPlanSerializer
 from apps.health.serializers import (
@@ -26,10 +27,32 @@ class PatientSummaryReportSerializer(serializers.Serializer):
     medicine_adherence = MedicineAdherenceSerializer()
 
 
+class TrimesterDistributionSerializer(serializers.Serializer):
+    trimester_1 = serializers.IntegerField()
+    trimester_2 = serializers.IntegerField()
+    trimester_3 = serializers.IntegerField()
+    unknown = serializers.IntegerField(help_text="Patients with a profile but no LMP date set yet.")
+
+
+class RecentActivitySerializer(serializers.Serializer):
+    type = serializers.ChoiceField(choices=["patient_registered", "appointment_booked", "sos_triggered"])
+    description = serializers.CharField()
+    timestamp = serializers.DateTimeField()
+
+
 class AdminStatsSerializer(serializers.Serializer):
     total_patients = serializers.IntegerField()
     total_doctors = serializers.IntegerField()
     total_appointments = serializers.IntegerField()
     appointments_this_month = serializers.IntegerField()
+    today_appointments = serializers.IntegerField()
     active_sos_events = serializers.IntegerField()
     new_patients_this_week = serializers.IntegerField()
+    trimester_distribution = TrimesterDistributionSerializer()
+    recent_activities = RecentActivitySerializer(many=True)
+
+
+class SearchResultsSerializer(serializers.Serializer):
+    doctors = DoctorListSerializer(many=True)
+    patients = PatientListSerializer(many=True)
+    appointments = AppointmentSerializer(many=True)

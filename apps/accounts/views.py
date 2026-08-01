@@ -1,5 +1,6 @@
-from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView, TokenRefreshView
 
@@ -13,11 +14,16 @@ from apps.accounts.serializers import (
     DoctorUpdateSerializer,
     MamaHealthTokenObtainPairSerializer,
     MeSerializer,
+    MeUpdateSerializer,
     PasswordChangeSerializer,
     PasswordForgotSerializer,
     PasswordResetSerializer,
+    PasswordVerifyOTPResponseSerializer,
+    PasswordVerifyOTPSerializer,
+    PatientAssignDoctorSerializer,
     PatientListSerializer,
     PatientProfileSerializer,
+    PatientUpdateSerializer,
     RegisterSerializer,
     ResendVerificationSerializer,
     VerifyEmailSerializer,
@@ -224,13 +230,18 @@ class LogoutView(TokenBlacklistView):
 
 @extend_schema(
     tags=["Auth"],
-    summary="Request a password reset email",
-    description="Sends a reset link (`{FRONTEND_URL}/reset-password?token=...`) if the email exists. Always returns 200 with the same message regardless — does not leak account existence.",
+    summary="Request a password reset code (step 1 of 3)",
+    description=(
+        "Emails a 6-digit OTP code (expires after `PASSWORD_RESET_OTP_EXPIRY_MINUTES`, default 10 "
+        "min) if the account exists. Always returns 200 with the same message regardless — does not "
+        "leak account existence. Next step: `POST /auth/password/verify-otp/` with the code from "
+        "the email."
+    ),
     examples=[
         OpenApiExample("Request", value={"email": "sara.ahmed@example.com"}, request_only=True),
         OpenApiExample(
             "200 OK",
-            value={"detail": "If that account exists, a password reset email has been sent."},
+            value={"detail": "If that account exists, a password reset code has been sent."},
             response_only=True,
             status_codes=["200"],
         ),
@@ -245,13 +256,56 @@ class PasswordForgotView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         services.request_password_reset(serializer.validated_data["email"])
-        return Response({"detail": "If that account exists, a password reset email has been sent."})
+        return Response({"detail": "If that account exists, a password reset code has been sent."})
 
 
 @extend_schema(
     tags=["Auth"],
-    summary="Reset password with token",
-    description="Consumes the single-use token from the password-reset email. Token expires after `PASSWORD_RESET_TOKEN_EXPIRY_HOURS` (default 2h).",
+    summary="Verify the password reset code (step 2 of 3)",
+    description=(
+        "Checks the emailed OTP code. On success, returns a `reset_token` to use with "
+        "`POST /auth/password/reset/` (step 3) — the frontend doesn't need to resubmit the code "
+        "again there. The code is single-use and only the most recently requested one is valid."
+    ),
+    responses={200: PasswordVerifyOTPResponseSerializer, 400: DetailResponseSerializer},
+    examples=[
+        OpenApiExample("Request", value={"email": "sara.ahmed@example.com", "otp_code": "482913"}, request_only=True),
+        OpenApiExample(
+            "200 OK",
+            value={"detail": "Code verified.", "reset_token": "8fK2mZ...reset-token..."},
+            response_only=True,
+            status_codes=["200"],
+        ),
+        OpenApiExample(
+            "400 Invalid/expired code",
+            value={"detail": "This code has expired. Please request a new one.", "errors": None},
+            response_only=True,
+            status_codes=["400"],
+        ),
+    ],
+)
+class PasswordVerifyOTPView(generics.GenericAPIView):
+    serializer_class = PasswordVerifyOTPSerializer
+    permission_classes = [permissions.AllowAny]
+    throttle_scope = "auth"
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            reset_token = services.verify_password_reset_otp(
+                email=serializer.validated_data["email"],
+                otp_code=serializer.validated_data["otp_code"],
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Code verified.", "reset_token": reset_token})
+
+
+@extend_schema(
+    tags=["Auth"],
+    summary="Reset password with token (step 3 of 3)",
+    description="Consumes the single-use `reset_token` returned by `POST /auth/password/verify-otp/`. Token expires after `PASSWORD_RESET_TOKEN_EXPIRY_HOURS` (default 2h).",
     responses={200: DetailResponseSerializer, 400: DetailResponseSerializer},
     examples=[
         OpenApiExample(
@@ -321,49 +375,79 @@ class PasswordChangeView(generics.GenericAPIView):
         return Response({"detail": "Password changed successfully."})
 
 
-@extend_schema(
-    tags=["Auth"],
-    summary="Get the current user",
-    description=(
-        "Returns the authenticated user plus whichever of `patient_profile`/`doctor_profile` "
-        "applies (the other is always `null`). Use `patient_profile.profile_complete` to decide "
-        "whether to route a patient to the 'complete your profile' screen after login."
-    ),
-    examples=[
-        OpenApiExample(
-            "200 OK — patient",
-            value={
-                "id": 2,
-                "email": "sara.ahmed@example.com",
-                "role": "patient",
-                "first_name": "Sara",
-                "last_name": "Ahmed",
-                "phone_number": "+923001234567",
-                "is_email_verified": True,
-                "date_joined": "2026-01-15T10:30:00Z",
-                "patient_profile": {
-                    "date_of_birth": "1995-06-20",
-                    "lmp_date": "2026-05-01",
-                    "edd_date": None,
-                    "blood_group": "O+",
-                    "emergency_contact_name": "Ahmed Khan",
-                    "emergency_contact_phone": "+923001112222",
-                    "address": "House 12, Street 5, Karachi",
-                    "profile_complete": True,
-                },
-                "doctor_profile": None,
-            },
-            response_only=True,
-            status_codes=["200"],
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Auth"],
+        summary="Get the current user",
+        description=(
+            "Returns the authenticated user plus whichever of `patient_profile`/`doctor_profile` "
+            "applies (the other is always `null`). Use `patient_profile.profile_complete` to decide "
+            "whether to route a patient to the 'complete your profile' screen after login. Works for "
+            "all three roles — for an Admin, both nested profiles are always `null`."
         ),
-    ],
+        examples=[
+            OpenApiExample(
+                "200 OK — patient",
+                value={
+                    "id": 2,
+                    "email": "sara.ahmed@example.com",
+                    "role": "patient",
+                    "first_name": "Sara",
+                    "last_name": "Ahmed",
+                    "phone_number": "+923001234567",
+                    "is_email_verified": True,
+                    "date_joined": "2026-01-15T10:30:00Z",
+                    "patient_profile": {
+                        "date_of_birth": "1995-06-20",
+                        "lmp_date": "2026-05-01",
+                        "edd_date": None,
+                        "blood_group": "O+",
+                        "emergency_contact_name": "Ahmed Khan",
+                        "emergency_contact_phone": "+923001112222",
+                        "address": "House 12, Street 5, Karachi",
+                        "profile_complete": True,
+                    },
+                    "doctor_profile": None,
+                },
+                response_only=True,
+                status_codes=["200"],
+            ),
+        ],
+    ),
+    patch=extend_schema(
+        tags=["Auth"],
+        summary="Update the current user's profile",
+        description=(
+            "Updates `first_name`/`last_name`/`phone_number` only — email, role, and verification "
+            "status are never editable here. For patient-specific fields (LMP date, blood group, "
+            "etc.) or doctor-specific fields (specialization, license), use "
+            "`/accounts/me/patient-profile/` or `/accounts/me/doctor-profile/` instead. Works for "
+            "all three roles, including Admin."
+        ),
+        examples=[
+            OpenApiExample(
+                "Request",
+                value={"first_name": "Sara", "last_name": "Ahmed", "phone_number": "+923001234567"},
+                request_only=True,
+            ),
+        ],
+    ),
 )
-class MeView(generics.RetrieveAPIView):
-    serializer_class = MeSerializer
+class MeView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return MeUpdateSerializer
+        return MeSerializer
 
     def get_object(self):
         return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        super().update(request, *args, **kwargs)
+        return Response(MeSerializer(request.user).data)
 
 
 @extend_schema(
@@ -628,48 +712,89 @@ class DoctorViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
 
-@extend_schema(
-    tags=["Accounts"],
-    summary="List patients",
-    description="Admin sees every patient. A doctor sees only patients assigned to them (derived from `PatientDoctorAssignment`, created automatically the first time that patient books an appointment with them). Forbidden for patients.",
-    examples=[
-        OpenApiExample(
-            "200 OK",
-            value={
-                "count": 1,
-                "next": None,
-                "previous": None,
-                "results": [
-                    {
-                        "id": 2,
-                        "email": "sara.ahmed@example.com",
-                        "first_name": "Sara",
-                        "last_name": "Ahmed",
-                        "phone_number": "+923001234567",
-                        "date_joined": "2026-01-15T10:30:00Z",
-                        "patient_profile": {
-                            "date_of_birth": "1995-06-20",
-                            "lmp_date": "2026-05-01",
-                            "edd_date": None,
-                            "blood_group": "O+",
-                            "emergency_contact_name": "Ahmed Khan",
-                            "emergency_contact_phone": "+923001112222",
-                            "address": "House 12, Street 5, Karachi",
-                            "profile_complete": True,
-                        },
-                    }
-                ],
-            },
-            response_only=True,
-            status_codes=["200"],
-        )
-    ],
-)
-class PatientListView(generics.ListAPIView):
-    """Admin sees all patients; a doctor sees only patients assigned to them."""
+_PATIENT_RESPONSE_EXAMPLE = {
+    "id": 2,
+    "email": "sara.ahmed@example.com",
+    "first_name": "Sara",
+    "last_name": "Ahmed",
+    "phone_number": "+923001234567",
+    "is_active": True,
+    "date_joined": "2026-01-15T10:30:00Z",
+    "patient_profile": {
+        "date_of_birth": "1995-06-20",
+        "lmp_date": "2026-05-01",
+        "edd_date": None,
+        "blood_group": "O+",
+        "emergency_contact_name": "Ahmed Khan",
+        "emergency_contact_phone": "+923001112222",
+        "address": "House 12, Street 5, Karachi",
+        "profile_complete": True,
+    },
+}
 
-    serializer_class = PatientListSerializer
+
+@extend_schema_view(
+    list=extend_schema(
+        tags=["Accounts"],
+        summary="List patients",
+        description=(
+            "Admin sees every patient (optionally narrowed with `?doctor_id=` to just that "
+            "doctor's assigned patients). A doctor always sees only patients assigned to them "
+            "(derived from `PatientDoctorAssignment`, created automatically the first time that "
+            "patient books an appointment with them) — `?doctor_id=` has no effect for a doctor "
+            "caller. Forbidden for patients."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="doctor_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Admin only: narrow the list to patients assigned to this doctor.",
+            )
+        ],
+        examples=[
+            OpenApiExample(
+                "200 OK",
+                value={"count": 1, "next": None, "previous": None, "results": [_PATIENT_RESPONSE_EXAMPLE]},
+                response_only=True,
+                status_codes=["200"],
+            )
+        ],
+    ),
+    retrieve=extend_schema(
+        tags=["Accounts"],
+        summary="Get a single patient",
+        description="Same scoping as list — a doctor gets 404 for a patient not assigned to them.",
+        examples=[OpenApiExample("200 OK", value=_PATIENT_RESPONSE_EXAMPLE, response_only=True, status_codes=["200"])],
+    ),
+    partial_update=extend_schema(
+        tags=["Accounts"],
+        summary="Update a patient (admin only)",
+        description="Admin-only. Typically used to deactivate a patient (`is_active: false`) rather than delete — there is no delete endpoint, deactivation preserves their clinical history.",
+        examples=[
+            OpenApiExample("Request — deactivate", value={"is_active": False}, request_only=True),
+            OpenApiExample("200 OK", value=_PATIENT_RESPONSE_EXAMPLE, response_only=True, status_codes=["200"]),
+        ],
+    ),
+    create=extend_schema(exclude=True),
+)
+class PatientViewSet(viewsets.ModelViewSet):
+    """Read: doctor (own assigned patients) or admin (all, or ?doctor_id=-scoped). Write: admin only."""
+
+    queryset = User.objects.filter(role=Role.PATIENT).select_related("patient_profile")  # for schema introspection only
+    http_method_names = ["get", "patch", "post", "head", "options"]
     permission_classes = [IsDoctorOrAdmin]
+
+    def get_serializer_class(self):
+        if self.action == "partial_update":
+            return PatientUpdateSerializer
+        return PatientListSerializer
+
+    def get_permissions(self):
+        if self.action in ("partial_update", "assign_doctor"):
+            return [IsAdmin()]
+        return [IsDoctorOrAdmin()]
 
     def get_queryset(self):
         qs = User.objects.filter(role=Role.PATIENT).select_related("patient_profile")
@@ -680,5 +805,58 @@ class PatientListView(generics.ListAPIView):
             assigned_ids = PatientDoctorAssignment.objects.filter(doctor=user).values_list(
                 "patient_id", flat=True
             )
-            qs = qs.filter(id__in=assigned_ids)
+            return qs.filter(id__in=assigned_ids)
+
+        doctor_id = self.request.query_params.get("doctor_id")
+        if doctor_id:
+            from apps.appointments.models import PatientDoctorAssignment
+
+            assigned_ids = PatientDoctorAssignment.objects.filter(doctor_id=doctor_id).values_list(
+                "patient_id", flat=True
+            )
+            return qs.filter(id__in=assigned_ids)
         return qs
+
+    def partial_update(self, request, *args, **kwargs):
+        super().partial_update(request, *args, **kwargs)
+        instance = self.get_object()
+        return Response(PatientListSerializer(instance).data)
+
+    def create(self, request, *args, **kwargs):
+        # "post" is in http_method_names only for the assign-doctor action below;
+        # patients are never created directly (they self-register via /auth/register/).
+        from rest_framework.exceptions import MethodNotAllowed
+
+        raise MethodNotAllowed("POST", detail="Patients cannot be created directly. Patients self-register via /auth/register/.")
+
+    @extend_schema(
+        tags=["Accounts"],
+        summary="Assign a doctor to a patient (admin only)",
+        description=(
+            "Manually creates a `PatientDoctorAssignment` — the same access-control row that's "
+            "normally created automatically when a patient books an appointment with a doctor. "
+            "Idempotent (assigning the same doctor twice is a no-op). Use this to give a doctor "
+            "access to a patient's records before any appointment exists."
+        ),
+        request=PatientAssignDoctorSerializer,
+        responses={200: DetailResponseSerializer, 400: DetailResponseSerializer},
+        examples=[
+            OpenApiExample("Request", value={"doctor_id": 4}, request_only=True),
+            OpenApiExample("200 OK", value={"detail": "Dr. Ayesha Malik assigned to this patient."}, response_only=True, status_codes=["200"]),
+        ],
+    )
+    @action(detail=True, methods=["post"], url_path="assign-doctor", permission_classes=[IsAdmin])
+    def assign_doctor(self, request, pk=None):
+        from apps.appointments.models import PatientDoctorAssignment
+
+        patient = self.get_object()
+        serializer = PatientAssignDoctorSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        doctor = serializer.validated_data["doctor_id"]
+
+        has_existing_assignment = PatientDoctorAssignment.objects.filter(patient=patient).exists()
+        PatientDoctorAssignment.objects.get_or_create(
+            patient=patient, doctor=doctor, defaults={"is_primary": not has_existing_assignment}
+        )
+        doctor_label = doctor.get_full_name() or doctor.email
+        return Response({"detail": f"{doctor_label} assigned to this patient."})

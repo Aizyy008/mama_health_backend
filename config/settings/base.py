@@ -279,6 +279,7 @@ FRONTEND_URL = env.str("FRONTEND_URL", default="https://app.mamahealth.example")
 # ---------------------------------------------------------------------------
 EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS = env.int("EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS", default=48)
 PASSWORD_RESET_TOKEN_EXPIRY_HOURS = env.int("PASSWORD_RESET_TOKEN_EXPIRY_HOURS", default=2)
+PASSWORD_RESET_OTP_EXPIRY_MINUTES = env.int("PASSWORD_RESET_OTP_EXPIRY_MINUTES", default=10)
 DOCTOR_INVITE_EXPIRY_DAYS = env.int("DOCTOR_INVITE_EXPIRY_DAYS", default=7)
 
 # ---------------------------------------------------------------------------

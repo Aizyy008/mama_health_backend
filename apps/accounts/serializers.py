@@ -46,6 +46,18 @@ class PasswordForgotSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
 
+class PasswordVerifyOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp_code = serializers.CharField(min_length=6, max_length=6)
+
+
+class PasswordVerifyOTPResponseSerializer(serializers.Serializer):
+    """Schema-only, for Swagger — the view builds this response dict itself."""
+
+    detail = serializers.CharField()
+    reset_token = serializers.CharField()
+
+
 class PasswordResetSerializer(serializers.Serializer):
     token = serializers.CharField()
     new_password = serializers.CharField(write_only=True, validators=[validate_password])
@@ -139,6 +151,14 @@ class MeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class MeUpdateSerializer(serializers.ModelSerializer):
+    """Writable subset of MeSerializer — email/role/is_email_verified are never editable here."""
+
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "phone_number"]
+
+
 class DoctorInviteSerializer(serializers.Serializer):
     email = serializers.EmailField()
     specialization = serializers.CharField(required=False, allow_blank=True, default="")
@@ -200,4 +220,32 @@ class PatientListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "email", "first_name", "last_name", "phone_number", "date_joined", "patient_profile"]
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "phone_number",
+            "is_active",
+            "date_joined",
+            "patient_profile",
+        ]
+
+
+class PatientUpdateSerializer(serializers.ModelSerializer):
+    patient_profile = PatientProfileSerializer(required=False)
+
+    class Meta:
+        model = User
+        fields = ["is_active", "first_name", "last_name", "phone_number", "patient_profile"]
+
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop("patient_profile", None)
+        instance = super().update(instance, validated_data)
+        if profile_data:
+            PatientProfile.objects.filter(user=instance).update(**profile_data)
+        return instance
+
+
+class PatientAssignDoctorSerializer(serializers.Serializer):
+    doctor_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(role=Role.DOCTOR))

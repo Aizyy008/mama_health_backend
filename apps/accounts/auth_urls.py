@@ -10,6 +10,7 @@ urlpatterns = [
     path("token/refresh/", views.MamaHealthTokenRefreshView.as_view(), name="auth-token-refresh"),
     path("logout/", views.LogoutView.as_view(), name="auth-logout"),
     path("password/forgot/", views.PasswordForgotView.as_view(), name="auth-password-forgot"),
+    path("password/verify-otp/", views.PasswordVerifyOTPView.as_view(), name="auth-password-verify-otp"),
     path("password/reset/", views.PasswordResetView.as_view(), name="auth-password-reset"),
     path("password/change/", views.PasswordChangeView.as_view(), name="auth-password-change"),
     path("me/", views.MeView.as_view(), name="auth-me"),
