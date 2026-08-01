@@ -39,8 +39,9 @@ Complete, step-by-step instructions to deploy this backend from scratch at **$0/
      ```
    - **Start command**:
      ```
-     gunicorn config.wsgi:application
+     gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
      ```
+     (Render injects a `$PORT` env var — the app must explicitly bind to it or the service never becomes reachable.)
 4. Add the environment variables below (Render dashboard → your service → **Environment**). You can also apply `render.yaml` directly as a Blueprint, which pre-fills the build/start commands and generates `SECRET_KEY` for you — you'll still need to set the rest manually since they're secrets not committed to the repo.
 
 ### Required environment variables
@@ -150,6 +151,15 @@ Render redeploys automatically on every push to the connected branch (default `m
 | Admin login fails after first deploy | Build command didn't run `seed_admin`, or `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` unset | Check Render's build logs for the `seed_admin` step; confirm both env vars are set, then Manual Deploy |
 | AI Assistant / Hospitals endpoints return 503 | Expected when `AI_API_KEY` / `GOOGLE_PLACES_API_KEY` are unset | Not a bug — these are pluggable adapters with a clean 503 fallback until the client supplies real credentials |
 | Migration fails during build | Neon connection string missing `?sslmode=require`, or Neon project paused/deleted | Re-copy the connection string from the Neon dashboard |
+| Render's "New Web Service" flow asks for a card | Render's anti-fraud check couldn't auto-verify the account — happens even though Render's stated policy is card-free for the free instance type | See "If Render asks for a card" below |
+
+### If Render asks for a card
+
+Render's free web service is genuinely $0/no-card by policy, but its sign-up fraud check is account-specific and can still prompt for one. Before assuming there's no card-free path:
+1. Double-check **Free** is actually selected as the instance type, not **Starter** (paid) — it's easy to click past this on the creation form.
+2. Try signing up via **GitHub OAuth** instead of email/password, or from a different browser session — the fraud check is sometimes triggered by session/network signals, not a blanket account rule.
+3. If it still asks: as of this writing, **Koyeb is not a usable fallback** — Mistral AI acquired Koyeb in February 2026 and closed its free Starter tier to new signups, pivoting the platform to enterprise AI/GPU workloads. Don't re-attempt Koyeb without first checking whether that's changed. Fly.io and Railway both now require a card unconditionally (deprecated their true free tiers). Re-run a fresh search for "no credit card required web hosting Django [current year]" before committing to another platform — this space changes fast and any list (including this one) can go stale within months.
+4. If truly no card-free platform works, the realistic fallback is a small paid VPS (~$5–10/month, e.g. Oracle Cloud, DigitalOcean, Hetzner) running **Coolify** (free, open-source, self-hosted PaaS — gives a Render-like git-push deploy experience). This is a real budget change from the client's stated $0 constraint, so raise it with them explicitly rather than deciding unilaterally.
 
 ---
 
