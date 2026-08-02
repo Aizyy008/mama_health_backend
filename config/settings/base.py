@@ -212,6 +212,15 @@ SPECTACULAR_SETTINGS = {
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
+# CORS_ALLOW_ALL_ORIGINS is a deliberate temporary escape hatch for active
+# frontend integration, when the exact origin(s) calling the API aren't
+# pinned down yet (e.g. Flutter Web dev builds on a random local port).
+# Tighten to CORS_ALLOWED_ORIGINS once real origins are known — see
+# DEPLOYMENT.md. Reasonably low-risk even wide open: this API is JWT
+# bearer-token auth (Authorization header set explicitly by app code), not
+# cookie/session auth, so a browser won't silently attach credentials to a
+# cross-origin request the way it would with cookies.
+CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
