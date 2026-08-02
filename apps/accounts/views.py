@@ -372,6 +372,7 @@ class PasswordChangeView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         request.user.set_password(serializer.validated_data["new_password"])
         request.user.save(update_fields=["password"])
+        services.send_password_changed_email(request.user)
         return Response({"detail": "Password changed successfully."})
 
 

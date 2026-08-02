@@ -2,9 +2,9 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.utils import timezone
 
+from apps.accounts.emails import send_transactional_email
 from apps.accounts.models import (
     DoctorInvite,
     DoctorProfile,
@@ -45,14 +45,15 @@ def send_email_verification(user: User) -> None:
     expires_at = timezone.now() + timedelta(hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS)
     EmailVerificationToken.objects.create(user=user, token=token, expires_at=expires_at)
     verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
-    send_mail(
+    send_transactional_email(
         subject="Verify your Mama Health account",
-        message=(
+        template_name="emails/verify_email.html",
+        context={"verify_url": verify_url, "expiry_hours": settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS},
+        to=user.email,
+        plain_message=(
             f"Welcome to Mama Health! Verify your email to activate your account:\n\n{verify_url}\n\n"
             f"This link expires in {settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS} hours."
         ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
     )
 
 
@@ -98,15 +99,16 @@ def request_password_reset(email: str) -> None:
     otp_code = generate_otp_code()
     expires_at = timezone.now() + timedelta(minutes=settings.PASSWORD_RESET_OTP_EXPIRY_MINUTES)
     PasswordResetOTP.objects.create(user=user, otp_code=otp_code, expires_at=expires_at)
-    send_mail(
+    send_transactional_email(
         subject="Your Mama Health password reset code",
-        message=(
+        template_name="emails/password_reset_otp.html",
+        context={"otp_code": otp_code, "expiry_minutes": settings.PASSWORD_RESET_OTP_EXPIRY_MINUTES},
+        to=user.email,
+        plain_message=(
             f"Your password reset code is: {otp_code}\n\n"
             f"This code expires in {settings.PASSWORD_RESET_OTP_EXPIRY_MINUTES} minutes. "
             "If you didn't request this, you can safely ignore this email."
         ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
     )
 
 
@@ -143,6 +145,27 @@ def verify_password_reset_otp(*, email: str, otp_code: str) -> str:
     return token
 
 
+def send_password_changed_email(user: User) -> None:
+    """
+    Security notice sent after any successful password change — via
+    /password/reset/ (OTP flow) or /password/change/ (authenticated,
+    knows current password). Not the OTP/reset-link emails themselves;
+    this fires only once the password has actually been updated, so the
+    user notices if they didn't make the change.
+    """
+    send_transactional_email(
+        subject="Your Mama Health password was changed",
+        template_name="emails/password_changed.html",
+        context={},
+        to=user.email,
+        plain_message=(
+            "This is a confirmation that your Mama Health account password was just changed.\n\n"
+            "If you made this change, no action is needed. If you didn't, reset your password "
+            "immediately via the app's forgot-password flow and contact support."
+        ),
+    )
+
+
 def reset_password(*, token: str, new_password: str) -> User:
     try:
         record = PasswordResetToken.objects.select_related("user").get(token=token, used_at__isnull=True)
@@ -156,6 +179,7 @@ def reset_password(*, token: str, new_password: str) -> User:
     user = record.user
     user.set_password(new_password)
     user.save(update_fields=["password"])
+    send_password_changed_email(user)
     return user
 
 
@@ -170,15 +194,20 @@ def invite_doctor(*, email: str, invited_by: User, specialization: str = "") -> 
         expires_at=expires_at,
     )
     accept_url = f"{settings.FRONTEND_URL}/doctor-invite?token={token}"
-    send_mail(
+    send_transactional_email(
         subject="You've been invited to Mama Health",
-        message=(
+        template_name="emails/doctor_invite.html",
+        context={
+            "accept_url": accept_url,
+            "specialization": specialization,
+            "expiry_days": settings.DOCTOR_INVITE_EXPIRY_DAYS,
+        },
+        to=email,
+        plain_message=(
             "You've been invited to join Mama Health as a doctor. "
             f"Set your password to activate your account:\n\n{accept_url}\n\n"
             f"This link expires in {settings.DOCTOR_INVITE_EXPIRY_DAYS} days."
         ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[email],
     )
     return invite
 

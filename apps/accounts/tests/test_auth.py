@@ -344,6 +344,34 @@ class TestPasswordReset:
         )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_password_change_sends_confirmation_email(self, patient_client, patient_user):
+        patient_user.set_password("CorrectOld123!")
+        patient_user.save()
+        resp = patient_client.post(
+            reverse("auth-password-change"),
+            {"old_password": "CorrectOld123!", "new_password": "BrandNew123!"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert len(mail.outbox) == 1
+        assert mail.outbox[0].to == [patient_user.email]
+        assert "changed" in mail.outbox[0].subject.lower()
+
+    def test_password_reset_sends_confirmation_email(self):
+        user = PatientUserFactory(password="OldPass123!")
+        record = PasswordResetToken.objects.create(
+            user=user, token="reset-tok-2", expires_at=timezone.now() + timedelta(hours=1)
+        )
+        client = APIClient()
+        resp = client.post(
+            reverse("auth-password-reset"),
+            {"token": record.token, "new_password": "NewPass123!"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert len(mail.outbox) == 1
+        assert "changed" in mail.outbox[0].subject.lower()
+
 
 class TestPasswordResetOTP:
     def test_forgot_password_emails_a_6_digit_otp_not_a_link(self):
