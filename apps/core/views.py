@@ -1,5 +1,3 @@
-import os
-
 from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -13,25 +11,6 @@ from rest_framework.response import Response
 @permission_classes([AllowAny])
 def health_check(request):
     return Response({"status": "ok"})
-
-
-@extend_schema(exclude=True)
-@api_view(["GET"])
-@permission_classes([AllowAny])
-@throttle_classes([])
-def debug_cors(request):
-    """TEMPORARY diagnostic — remove once the live CORS env var mystery is resolved."""
-    provided_secret = request.headers.get("X-Cron-Secret", "")
-    if not settings.CRON_SECRET or provided_secret != settings.CRON_SECRET:
-        return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
-    return Response(
-        {
-            "settings_CORS_ALLOW_ALL_ORIGINS": settings.CORS_ALLOW_ALL_ORIGINS,
-            "settings_CORS_ALLOWED_ORIGINS": settings.CORS_ALLOWED_ORIGINS,
-            "os_environ_raw": os.environ.get("CORS_ALLOW_ALL_ORIGINS"),
-            "django_settings_module": os.environ.get("DJANGO_SETTINGS_MODULE"),
-        }
-    )
 
 
 def _task_registry():
