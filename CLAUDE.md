@@ -74,8 +74,8 @@ No separate "admin" Django app — Admin is a permission tier (`IsAdmin`), not a
 
 ```
 POST /api/v1/auth/register/                    patient self-register
-POST /api/v1/auth/verify-email/                 {token}
-POST /api/v1/auth/resend-verification/          {email}
+POST /api/v1/auth/verify-email/                 {email, otp_code} — 6-digit code, not a link (see note below)
+POST /api/v1/auth/resend-verification/          {email} — invalidates any previous unused code
 POST /api/v1/auth/login/                        JWT; blocks unverified patients; role embedded in claims
 POST /api/v1/auth/token/refresh/
 POST /api/v1/auth/logout/                       blacklists refresh token
@@ -86,7 +86,7 @@ POST /api/v1/auth/password/change/
 GET/PATCH /api/v1/auth/me/                      PATCH: first_name/last_name/phone_number only, any role
 
 POST  /api/v1/accounts/doctors/invite/          admin only
-POST  /api/v1/accounts/doctors/invite/accept/   {token, password}
+POST  /api/v1/accounts/doctors/invite/accept/   {email, otp_code, password} — 6-digit code, not a link
 GET   /api/v1/accounts/doctors/                 any authenticated user (read); admin can PATCH
 PATCH /api/v1/accounts/doctors/{id}/            admin only
 GET   /api/v1/accounts/patients/                admin (all, optional ?doctor_id=) / doctor (scoped to PatientDoctorAssignment)
@@ -100,6 +100,10 @@ GET/PATCH /api/v1/accounts/me/doctor-profile/   doctor only
 Admin accounts: `createsuperuser` or `seed_admin` management command only.
 
 **Password reset is a 3-step OTP flow** (added Phase 12, replacing the original email-link flow): `forgot/` emails a 6-digit code (`PasswordResetOTP`, expires after `PASSWORD_RESET_OTP_EXPIRY_MINUTES`, default 10 min; requesting a new one invalidates any previous unused code for that user) → `verify-otp/` checks the code and, on success, issues a `PasswordResetToken` (the same mechanism the old link flow used) so the frontend doesn't resubmit the code again → `reset/` consumes that token exactly as before. This was a deliberate, in-place replacement (not an additive parallel flow) since nothing was in production yet when the Admin Web frontend dev requested OTP specifically — `reset/`'s request/response shape is unchanged, only what feeds it changed.
+
+**Email verification and doctor invites are also OTP codes, not links** (Phase 12 follow-up): originally both emailed an `{FRONTEND_URL}/...?token=...` link. Since Patient and Doctor are **mobile-only** apps, that link just opens a phone's browser to a page that doesn't exist (`FRONTEND_URL` was never set to a real domain) — and even with a real domain, opening the *app* from a tapped link requires Universal Links (iOS) / App Links (Android) deep-link configuration on the Flutter side, which is real cross-team coordination, not a backend-only fix. Switched both to the same OTP-code pattern as password reset instead: `EmailVerificationToken`/`DoctorInvite` (models kept, field renamed `token` → `otp_code`, migration `0004`) now hold a 6-digit code rather than a long opaque token, and `otp_code` is deliberately **not** `unique=True` (a 6-digit space collides eventually at scale) — lookups disambiguate via `(user/email, otp_code, used_at__isnull=True)` or `status=PENDING`, same as `PasswordResetOTP`. `verify-email/` is now `{email, otp_code}`; `doctors/invite/accept/` is now `{email, otp_code, password, ...}`. `PasswordResetToken` (the *bridge* token issued by `password/verify-otp/`, consumed once by `password/reset/`) is intentionally unchanged — it's never shown to or typed by a user, so the mobile-link problem doesn't apply to it.
+
+**All transactional emails are branded HTML** (Phase 12 follow-up), not plain text: `apps/accounts/emails.py::send_transactional_email()` wraps `EmailMultiAlternatives` + a Django template under `apps/accounts/templates/emails/` (a shared `base_email.html` header/footer, one content template per flow), with the existing plain-text message kept as the `EmailMultiAlternatives` fallback for text-only clients/deliverability. Covers all 4 flows: verify-email, password-reset OTP, doctor invite, and a new **password-changed confirmation** (`send_password_changed_email()`, fired from both `/password/reset/` and `/password/change/` — a security notice so a user notices if a password change wasn't theirs; not requested by either the client doc or the Admin Web spec, added as a natural gap once the other three flows were audited).
 
 ## Appointments endpoints (built, Phase 2)
 

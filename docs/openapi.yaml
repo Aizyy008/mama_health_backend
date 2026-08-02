@@ -12,7 +12,7 @@ paths:
         account regardless of anything else in the payload — doctors and admins are
         never created this way (see Doctor Invite / seed_admin). Sends a verification
         email; the account cannot log in until `verify-email/` is called with the
-        token from that email.
+        code from that email.
       summary: Register a new patient
       tags:
       - Auth
@@ -71,11 +71,13 @@ paths:
   /api/v1/auth/verify-email/:
     post:
       operationId: auth_verify_email_create
-      description: 'Consumes the single-use token emailed to the patient on registration
-        (link format: `{FRONTEND_URL}/verify-email?token=...`). The frontend reads
-        `token` from that deep link''s query string and POSTs it here. Token expires
-        after `EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS` (default 48h).'
-      summary: Verify email with token
+      description: Consumes the 6-digit OTP code emailed to the patient on registration
+        — a code, not a link, since patients are mobile-app-only and an emailed https://
+        link just opens a browser, not the app, without real deep-link setup. Only
+        the most recently requested code is valid (requesting a new one via `resend-verification/`
+        invalidates any previous unused code). Expires after `EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS`
+        (default 48h).
+      summary: Verify email with a code
       tags:
       - Auth
       requestBody:
@@ -86,7 +88,8 @@ paths:
             examples:
               Request:
                 value:
-                  token: Pw5n22QuyiX8_7f-dQozm127jEjJ9Vz0gV7gsVH4qfE
+                  email: sara.ahmed@example.com
+                  otp_code: '482913'
           application/x-www-form-urlencoded:
             schema:
               $ref: '#/components/schemas/VerifyEmailRequest'
@@ -115,19 +118,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/DetailResponse'
               examples:
-                400Invalid/expiredToken:
+                400Invalid/expiredCode:
                   value:
-                    detail: Verification token has expired. Please request a new one.
+                    detail: This code has expired. Please request a new one.
                     errors: null
-                  summary: 400 Invalid/expired token
+                  summary: 400 Invalid/expired code
           description: ''
   /api/v1/auth/resend-verification/:
     post:
       operationId: auth_resend_verification_create
-      description: Re-issues a fresh verification token/email for an unverified account.
-        Always returns 200 with the same generic message whether or not the email
-        exists/is already verified — this is intentional (does not leak account existence),
-        so don't treat the response body as confirmation the email was actually sent.
+      description: Re-issues a fresh verification code/email for an unverified account
+        (invalidates any previous unused code). Always returns 200 with the same generic
+        message whether or not the email exists/is already verified — this is intentional
+        (does not leak account existence), so don't treat the response body as confirmation
+        the email was actually sent.
       summary: Resend the verification email
       tags:
       - Auth
@@ -628,10 +632,11 @@ paths:
   /api/v1/accounts/doctors/invite/accept/:
     post:
       operationId: accounts_doctors_invite_accept_create
-      description: Public (no auth) — the doctor reaches this via the emailed invite
-        link's token. Sets the doctor's password and activates the account. Unlike
-        patient registration, this account is **immediately email-verified** (accepting
-        the invite email already proves ownership) and can log in right away.
+      description: Public (no auth) — the doctor reaches this via the 6-digit OTP
+        code emailed to them (a code, not a link, since the doctor app is mobile-only).
+        Sets the doctor's password and activates the account. Unlike patient registration,
+        this account is **immediately email-verified** (entering the invite code already
+        proves ownership) and can log in right away.
       summary: Accept a doctor invite
       tags:
       - Accounts
@@ -643,7 +648,8 @@ paths:
             examples:
               Request:
                 value:
-                  token: 8fK2mZ...invite-token...
+                  email: dr.ayesha@example.com
+                  otp_code: '482913'
                   password: DoctorPass123!
                   first_name: Ayesha
                   last_name: Malik
@@ -1945,51 +1951,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/health/blood-pressure/{id}/:
-    patch:
-      operationId: health_blood_pressure_partial_update
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted by default, or narrowed to one patient via
-            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
-            full record — without this, admin would see every patient's rows
-            mixed together with no way to filter to just one)
-      summary: Update a blood pressure reading
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this blood pressure reading.
-        required: true
-      tags:
-      - Health
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
-            examples:
-              Request:
-                value:
-                  notes: Slightly elevated, will recheck tomorrow
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BloodPressureReading'
-          description: ''
     get:
       operationId: health_blood_pressure_retrieve
       description: |-
@@ -2069,6 +2030,51 @@ paths:
             schema:
               $ref: '#/components/schemas/BloodPressureReadingRequest'
         required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodPressureReading'
+          description: ''
+    patch:
+      operationId: health_blood_pressure_partial_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Update a blood pressure reading
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood pressure reading.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
+            examples:
+              Request:
+                value:
+                  notes: Slightly elevated, will recheck tomorrow
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodPressureReadingRequest'
       security:
       - jwtAuth: []
       responses:
@@ -2217,51 +2223,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/health/blood-sugar/{id}/:
-    patch:
-      operationId: health_blood_sugar_partial_update
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted by default, or narrowed to one patient via
-            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
-            full record — without this, admin would see every patient's rows
-            mixed together with no way to filter to just one)
-      summary: Update a blood sugar reading
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this blood sugar reading.
-        required: true
-      tags:
-      - Health
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedBloodSugarReadingRequest'
-            examples:
-              Request:
-                value:
-                  notes: Tested after a large meal
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedBloodSugarReadingRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedBloodSugarReadingRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BloodSugarReading'
-          description: ''
     get:
       operationId: health_blood_sugar_retrieve
       description: |-
@@ -2340,6 +2301,51 @@ paths:
             schema:
               $ref: '#/components/schemas/BloodSugarReadingRequest'
         required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloodSugarReading'
+          description: ''
+    patch:
+      operationId: health_blood_sugar_partial_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Update a blood sugar reading
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood sugar reading.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodSugarReadingRequest'
+            examples:
+              Request:
+                value:
+                  notes: Tested after a large meal
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodSugarReadingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBloodSugarReadingRequest'
       security:
       - jwtAuth: []
       responses:
@@ -2491,46 +2497,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/health/symptoms/{id}/:
-    patch:
-      operationId: health_symptoms_partial_update
-      description: Same upsert-shaped body as create — usually unnecessary since POSTing
-        again for the same date already upserts (see above).
-      summary: Update a symptom log
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this symptom log.
-        required: true
-      tags:
-      - Health
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedSymptomLogRequest'
-            examples:
-              Request:
-                value:
-                  symptom_ids:
-                  - 1
-                  notes: Nausea improved by evening
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedSymptomLogRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedSymptomLogRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SymptomLog'
-          description: ''
     get:
       operationId: health_symptoms_retrieve
       description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
@@ -2596,6 +2562,46 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/SymptomLogRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymptomLog'
+          description: ''
+    patch:
+      operationId: health_symptoms_partial_update
+      description: Same upsert-shaped body as create — usually unnecessary since POSTing
+        again for the same date already upserts (see above).
+      summary: Update a symptom log
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this symptom log.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSymptomLogRequest'
+            examples:
+              Request:
+                value:
+                  symptom_ids:
+                  - 1
+                  notes: Nausea improved by evening
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSymptomLogRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSymptomLogRequest'
       security:
       - jwtAuth: []
       responses:
@@ -3257,51 +3263,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/health/surgical-procedures/{id}/:
-    patch:
-      operationId: health_surgical_procedures_partial_update
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted by default, or narrowed to one patient via
-            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
-            full record — without this, admin would see every patient's rows
-            mixed together with no way to filter to just one)
-      summary: Update a surgical procedure record
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this surgical procedure record.
-        required: true
-      tags:
-      - Health
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
-            examples:
-              Request:
-                value:
-                  notes: Follow-up scan showed full recovery
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SurgicalProcedureRecord'
-          description: ''
     get:
       operationId: health_surgical_procedures_retrieve
       description: |-
@@ -3381,6 +3342,51 @@ paths:
             schema:
               $ref: '#/components/schemas/SurgicalProcedureRecordRequest'
         required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurgicalProcedureRecord'
+          description: ''
+    patch:
+      operationId: health_surgical_procedures_partial_update
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Update a surgical procedure record
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this surgical procedure record.
+        required: true
+      tags:
+      - Health
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
+            examples:
+              Request:
+                value:
+                  notes: Follow-up scan showed full recovery
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSurgicalProcedureRecordRequest'
       security:
       - jwtAuth: []
       responses:
@@ -3714,46 +3720,6 @@ paths:
                   summary: 404 No active plan
           description: ''
   /api/v1/diet/plans/{id}/:
-    patch:
-      operationId: diet_plans_partial_update
-      description: '`meals`/`foods_to_avoid`, if included, fully replace the existing
-        set (delete + recreate) — not merged/diffed. Omit them to leave meals/foods
-        untouched while updating other fields.'
-      summary: Update a diet plan (doctor/admin only)
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this diet plan.
-        required: true
-      tags:
-      - Diet
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedDietPlanRequest'
-            examples:
-              Request—NotesOnly:
-                value:
-                  notes: Reduce salt intake — mild swelling noted.
-                summary: Request — notes only
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedDietPlanRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedDietPlanRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DietPlan'
-          description: ''
     get:
       operationId: diet_plans_retrieve
       description: Doctor/admin authored; patient is read-only (never creates/edits
@@ -3833,6 +3799,46 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/DietPlanRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DietPlan'
+          description: ''
+    patch:
+      operationId: diet_plans_partial_update
+      description: '`meals`/`foods_to_avoid`, if included, fully replace the existing
+        set (delete + recreate) — not merged/diffed. Omit them to leave meals/foods
+        untouched while updating other fields.'
+      summary: Update a diet plan (doctor/admin only)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this diet plan.
+        required: true
+      tags:
+      - Diet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDietPlanRequest'
+            examples:
+              Request—NotesOnly:
+                value:
+                  notes: Reduce salt intake — mild swelling noted.
+                summary: Request — notes only
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDietPlanRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDietPlanRequest'
       security:
       - jwtAuth: []
       responses:
@@ -3992,44 +3998,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/medicines/reminders/{id}/:
-    patch:
-      operationId: medicines_reminders_partial_update
-      description: 'E.g. `{"is_active": false}` to stop reminders without deleting
-        history.'
-      summary: Update a medicine reminder
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this medicine reminder.
-        required: true
-      tags:
-      - Medicines
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
-            examples:
-              Request:
-                value:
-                  is_active: false
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MedicineReminder'
-          description: ''
     get:
       operationId: medicines_reminders_retrieve
       description: |-
@@ -4114,6 +4082,44 @@ paths:
             schema:
               $ref: '#/components/schemas/MedicineReminderRequest'
         required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineReminder'
+          description: ''
+    patch:
+      operationId: medicines_reminders_partial_update
+      description: 'E.g. `{"is_active": false}` to stop reminders without deleting
+        history.'
+      summary: Update a medicine reminder
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this medicine reminder.
+        required: true
+      tags:
+      - Medicines
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
+            examples:
+              Request:
+                value:
+                  is_active: false
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMedicineReminderRequest'
       security:
       - jwtAuth: []
       responses:
@@ -5960,9 +5966,14 @@ components:
     DoctorInviteAcceptRequest:
       type: object
       properties:
-        token:
+        email:
           type: string
+          format: email
           minLength: 1
+        otp_code:
+          type: string
+          minLength: 6
+          maxLength: 6
         password:
           type: string
           writeOnly: true
@@ -5977,8 +5988,9 @@ components:
           type: string
           default: ''
       required:
+      - email
+      - otp_code
       - password
-      - token
     DoctorInviteRequest:
       type: object
       properties:
@@ -7951,11 +7963,17 @@ components:
     VerifyEmailRequest:
       type: object
       properties:
-        token:
+        email:
           type: string
+          format: email
           minLength: 1
+        otp_code:
+          type: string
+          minLength: 6
+          maxLength: 6
       required:
-      - token
+      - email
+      - otp_code
     WaterIntakeEntry:
       type: object
       description: |-

@@ -35,7 +35,8 @@ class RegisterSerializer(serializers.Serializer):
 
 
 class VerifyEmailSerializer(serializers.Serializer):
-    token = serializers.CharField()
+    email = serializers.EmailField()
+    otp_code = serializers.CharField(min_length=6, max_length=6)
 
 
 class ResendVerificationSerializer(serializers.Serializer):
@@ -176,7 +177,8 @@ class DoctorInviteSerializer(serializers.Serializer):
 
 
 class DoctorInviteAcceptSerializer(serializers.Serializer):
-    token = serializers.CharField()
+    email = serializers.EmailField()
+    otp_code = serializers.CharField(min_length=6, max_length=6)
     password = serializers.CharField(write_only=True, validators=[validate_password])
     first_name = serializers.CharField(required=False, allow_blank=True, default="")
     last_name = serializers.CharField(required=False, allow_blank=True, default="")

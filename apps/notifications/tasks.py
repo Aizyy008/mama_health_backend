@@ -144,11 +144,12 @@ def broadcast_notification(*, title, body, target_role=None):
 
 @shared_task
 def cleanup_expired_invites_and_tokens():
-    from apps.accounts.models import DoctorInvite, EmailVerificationToken, PasswordResetToken
+    from apps.accounts.models import DoctorInvite, EmailVerificationToken, PasswordResetOTP, PasswordResetToken
 
     now = timezone.now()
     DoctorInvite.objects.filter(status=DoctorInvite.Status.PENDING, expires_at__lt=now).update(
         status=DoctorInvite.Status.EXPIRED
     )
     EmailVerificationToken.objects.filter(used_at__isnull=True, expires_at__lt=now).delete()
+    PasswordResetOTP.objects.filter(used_at__isnull=True, expires_at__lt=now).delete()
     PasswordResetToken.objects.filter(used_at__isnull=True, expires_at__lt=now).delete()

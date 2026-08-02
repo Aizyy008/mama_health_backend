@@ -64,7 +64,12 @@ class DoctorInvite(TimeStampedModel):
         User, on_delete=models.SET_NULL, null=True, related_name="doctor_invites_sent"
     )
     specialization = models.CharField(max_length=150, blank=True)
-    token = models.CharField(max_length=128, unique=True)
+    # 6-digit OTP, not a URL token — invite acceptance happens in the mobile
+    # app (email a link, not a code, doesn't reliably work: tapping an
+    # https:// link opens a browser, not the app, without real deep-link
+    # setup). Not unique=True: a 6-digit space collides eventually at scale,
+    # disambiguated instead by (email, otp_code, status=PENDING) at lookup.
+    otp_code = models.CharField(max_length=6)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     expires_at = models.DateTimeField()
 
@@ -73,8 +78,11 @@ class DoctorInvite(TimeStampedModel):
 
 
 class EmailVerificationToken(TimeStampedModel):
+    """Despite the model name (kept for migration/history continuity), this
+    stores a 6-digit OTP, not a URL token — same reasoning as DoctorInvite."""
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="verification_tokens")
-    token = models.CharField(max_length=128, unique=True)
+    otp_code = models.CharField(max_length=6)
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
 

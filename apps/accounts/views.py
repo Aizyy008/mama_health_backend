@@ -40,7 +40,7 @@ from apps.core.serializers import DetailResponseSerializer
         "Public, patient-only self-registration. Always creates a `role=patient` account "
         "regardless of anything else in the payload — doctors and admins are never created "
         "this way (see Doctor Invite / seed_admin). Sends a verification email; the account "
-        "cannot log in until `verify-email/` is called with the token from that email."
+        "cannot log in until `verify-email/` is called with the code from that email."
     ),
     responses={201: DetailResponseSerializer, 400: DetailResponseSerializer},
     examples=[
@@ -89,20 +89,21 @@ class RegisterView(generics.GenericAPIView):
 
 @extend_schema(
     tags=["Auth"],
-    summary="Verify email with token",
+    summary="Verify email with a code",
     description=(
-        "Consumes the single-use token emailed to the patient on registration (link format: "
-        "`{FRONTEND_URL}/verify-email?token=...`). The frontend reads `token` from that deep "
-        "link's query string and POSTs it here. Token expires after "
-        "`EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS` (default 48h)."
+        "Consumes the 6-digit OTP code emailed to the patient on registration — a code, not a "
+        "link, since patients are mobile-app-only and an emailed https:// link just opens a "
+        "browser, not the app, without real deep-link setup. Only the most recently requested "
+        "code is valid (requesting a new one via `resend-verification/` invalidates any previous "
+        "unused code). Expires after `EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS` (default 48h)."
     ),
     responses={200: DetailResponseSerializer, 400: DetailResponseSerializer},
     examples=[
-        OpenApiExample("Request", value={"token": "Pw5n22QuyiX8_7f-dQozm127jEjJ9Vz0gV7gsVH4qfE"}, request_only=True),
+        OpenApiExample("Request", value={"email": "sara.ahmed@example.com", "otp_code": "482913"}, request_only=True),
         OpenApiExample("200 OK", value={"detail": "Email verified. You can now log in."}, response_only=True, status_codes=["200"]),
         OpenApiExample(
-            "400 Invalid/expired token",
-            value={"detail": "Verification token has expired. Please request a new one.", "errors": None},
+            "400 Invalid/expired code",
+            value={"detail": "This code has expired. Please request a new one.", "errors": None},
             response_only=True,
             status_codes=["400"],
         ),
@@ -116,7 +117,9 @@ class VerifyEmailView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            services.verify_email(serializer.validated_data["token"])
+            services.verify_email(
+                email=serializer.validated_data["email"], otp_code=serializer.validated_data["otp_code"]
+            )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"detail": "Email verified. You can now log in."})
@@ -126,7 +129,8 @@ class VerifyEmailView(generics.GenericAPIView):
     tags=["Auth"],
     summary="Resend the verification email",
     description=(
-        "Re-issues a fresh verification token/email for an unverified account. Always returns "
+        "Re-issues a fresh verification code/email for an unverified account (invalidates any "
+        "previous unused code). Always returns "
         "200 with the same generic message whether or not the email exists/is already verified "
         "— this is intentional (does not leak account existence), so don't treat the response "
         "body as confirmation the email was actually sent."
@@ -575,17 +579,19 @@ class DoctorInviteView(generics.GenericAPIView):
     tags=["Accounts"],
     summary="Accept a doctor invite",
     description=(
-        "Public (no auth) — the doctor reaches this via the emailed invite link's token. Sets the "
-        "doctor's password and activates the account. Unlike patient registration, this account is "
-        "**immediately email-verified** (accepting the invite email already proves ownership) and "
-        "can log in right away."
+        "Public (no auth) — the doctor reaches this via the 6-digit OTP code emailed to them (a "
+        "code, not a link, since the doctor app is mobile-only). Sets the doctor's password and "
+        "activates the account. Unlike patient registration, this account is **immediately "
+        "email-verified** (entering the invite code already proves ownership) and can log in "
+        "right away."
     ),
     responses={201: DetailResponseSerializer, 400: DetailResponseSerializer},
     examples=[
         OpenApiExample(
             "Request",
             value={
-                "token": "8fK2mZ...invite-token...",
+                "email": "dr.ayesha@example.com",
+                "otp_code": "482913",
                 "password": "DoctorPass123!",
                 "first_name": "Ayesha",
                 "last_name": "Malik",

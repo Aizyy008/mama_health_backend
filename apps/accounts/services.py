@@ -41,33 +41,47 @@ def register_patient(*, email, password, first_name="", last_name="", phone_numb
 
 
 def send_email_verification(user: User) -> None:
-    token = generate_token()
+    """
+    Emails a 6-digit OTP, not a link — patients are mobile-only, and an
+    https:// link in an email just opens a browser, not the app, without
+    real deep-link (Universal Links/App Links) setup. Any previously
+    unused code for this user is invalidated first, same reasoning as
+    password-reset OTPs: only the most recently requested code is valid.
+    """
+    EmailVerificationToken.objects.filter(user=user, used_at__isnull=True).update(used_at=timezone.now())
+
+    otp_code = generate_otp_code()
     expires_at = timezone.now() + timedelta(hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS)
-    EmailVerificationToken.objects.create(user=user, token=token, expires_at=expires_at)
-    verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+    EmailVerificationToken.objects.create(user=user, otp_code=otp_code, expires_at=expires_at)
     send_transactional_email(
         subject="Verify your Mama Health account",
         template_name="emails/verify_email.html",
-        context={"verify_url": verify_url, "expiry_hours": settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS},
+        context={"otp_code": otp_code, "expiry_hours": settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS},
         to=user.email,
         plain_message=(
-            f"Welcome to Mama Health! Verify your email to activate your account:\n\n{verify_url}\n\n"
-            f"This link expires in {settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS} hours."
+            f"Welcome to Mama Health! Your verification code is: {otp_code}\n\n"
+            f"This code expires in {settings.EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS} hours."
         ),
     )
 
 
-def verify_email(token: str) -> User:
+def verify_email(*, email: str, otp_code: str) -> User:
     try:
-        record = EmailVerificationToken.objects.select_related("user").get(token=token, used_at__isnull=True)
+        user = User.objects.get(email__iexact=email)
+    except User.DoesNotExist as exc:
+        raise ValueError("Invalid or expired code. Please request a new one.") from exc
+
+    try:
+        record = EmailVerificationToken.objects.filter(
+            user=user, otp_code=otp_code, used_at__isnull=True
+        ).latest("created_at")
     except EmailVerificationToken.DoesNotExist as exc:
-        raise ValueError("Invalid or already-used verification token.") from exc
+        raise ValueError("Invalid or expired code. Please request a new one.") from exc
     if record.expires_at < timezone.now():
-        raise ValueError("Verification token has expired. Please request a new one.")
+        raise ValueError("This code has expired. Please request a new one.")
 
     record.used_at = timezone.now()
     record.save(update_fields=["used_at"])
-    user = record.user
     user.is_email_verified = True
     user.save(update_fields=["is_email_verified"])
     return user
@@ -184,41 +198,42 @@ def reset_password(*, token: str, new_password: str) -> User:
 
 
 def invite_doctor(*, email: str, invited_by: User, specialization: str = "") -> DoctorInvite:
-    token = generate_token()
+    otp_code = generate_otp_code()
     expires_at = timezone.now() + timedelta(days=settings.DOCTOR_INVITE_EXPIRY_DAYS)
     invite = DoctorInvite.objects.create(
         email=email,
         invited_by=invited_by,
         specialization=specialization,
-        token=token,
+        otp_code=otp_code,
         expires_at=expires_at,
     )
-    accept_url = f"{settings.FRONTEND_URL}/doctor-invite?token={token}"
     send_transactional_email(
         subject="You've been invited to Mama Health",
         template_name="emails/doctor_invite.html",
         context={
-            "accept_url": accept_url,
+            "otp_code": otp_code,
             "specialization": specialization,
             "expiry_days": settings.DOCTOR_INVITE_EXPIRY_DAYS,
         },
         to=email,
         plain_message=(
             "You've been invited to join Mama Health as a doctor. "
-            f"Set your password to activate your account:\n\n{accept_url}\n\n"
-            f"This link expires in {settings.DOCTOR_INVITE_EXPIRY_DAYS} days."
+            f"Open the app and enter this code to set up your account: {otp_code}\n\n"
+            f"This code expires in {settings.DOCTOR_INVITE_EXPIRY_DAYS} days."
         ),
     )
     return invite
 
 
 def accept_doctor_invite(
-    *, token: str, password: str, first_name: str = "", last_name: str = "", phone_number: str = ""
+    *, email: str, otp_code: str, password: str, first_name: str = "", last_name: str = "", phone_number: str = ""
 ) -> User:
     try:
-        invite = DoctorInvite.objects.get(token=token, status=DoctorInvite.Status.PENDING)
+        invite = DoctorInvite.objects.filter(
+            email__iexact=email, otp_code=otp_code, status=DoctorInvite.Status.PENDING
+        ).latest("created_at")
     except DoctorInvite.DoesNotExist as exc:
-        raise ValueError("Invalid or already-used invite token.") from exc
+        raise ValueError("Invalid or already-used invite code.") from exc
 
     if invite.expires_at < timezone.now():
         invite.status = DoctorInvite.Status.EXPIRED

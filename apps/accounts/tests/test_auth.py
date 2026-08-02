@@ -59,15 +59,17 @@ class TestRegistrationAndVerification:
         )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_verify_email_with_valid_token_allows_login(self):
+    def test_verify_email_with_valid_code_allows_login(self):
         user = PatientUserFactory(is_email_verified=False, password="StrongPass123!")
-        token_record = EmailVerificationToken.objects.create(
+        record = EmailVerificationToken.objects.create(
             user=user,
-            token="valid-token-123",
+            otp_code="123456",
             expires_at=timezone.now() + timedelta(hours=1),
         )
         client = APIClient()
-        resp = client.post(reverse("auth-verify-email"), {"token": token_record.token}, format="json")
+        resp = client.post(
+            reverse("auth-verify-email"), {"email": user.email, "otp_code": record.otp_code}, format="json"
+        )
         assert resp.status_code == status.HTTP_200_OK
         user.refresh_from_db()
         assert user.is_email_verified is True
@@ -78,19 +80,23 @@ class TestRegistrationAndVerification:
         assert login_resp.status_code == status.HTTP_200_OK
         assert login_resp.data["role"] == Role.PATIENT
 
-    def test_verify_email_with_invalid_token_rejected(self):
+    def test_verify_email_with_invalid_code_rejected(self):
+        user = PatientUserFactory(is_email_verified=False)
         client = APIClient()
-        resp = client.post(reverse("auth-verify-email"), {"token": "does-not-exist"}, format="json")
+        resp = client.post(
+            reverse("auth-verify-email"), {"email": user.email, "otp_code": "000000"}, format="json"
+        )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_verify_email_token_is_single_use(self):
+    def test_verify_email_code_is_single_use(self):
         user = PatientUserFactory(is_email_verified=False, password="StrongPass123!")
-        token_record = EmailVerificationToken.objects.create(
-            user=user, token="one-shot-token", expires_at=timezone.now() + timedelta(hours=1)
+        record = EmailVerificationToken.objects.create(
+            user=user, otp_code="654321", expires_at=timezone.now() + timedelta(hours=1)
         )
         client = APIClient()
-        first = client.post(reverse("auth-verify-email"), {"token": token_record.token}, format="json")
-        second = client.post(reverse("auth-verify-email"), {"token": token_record.token}, format="json")
+        payload = {"email": user.email, "otp_code": record.otp_code}
+        first = client.post(reverse("auth-verify-email"), payload, format="json")
+        second = client.post(reverse("auth-verify-email"), payload, format="json")
         assert first.status_code == status.HTTP_200_OK
         assert second.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -145,7 +151,7 @@ class TestDoctorProvisioning:
         client = APIClient()
         resp = client.post(
             reverse("doctor-invite-accept"),
-            {"token": invite.token, "password": "DoctorPass123!"},
+            {"email": invite.email, "otp_code": invite.otp_code, "password": "DoctorPass123!"},
             format="json",
         )
         assert resp.status_code == status.HTTP_201_CREATED
@@ -156,11 +162,11 @@ class TestDoctorProvisioning:
         invite.refresh_from_db()
         assert invite.status == DoctorInvite.Status.ACCEPTED
 
-    def test_accept_invite_token_is_single_use(self, admin_client):
+    def test_accept_invite_code_is_single_use(self, admin_client):
         admin_client.post(reverse("doctor-invite"), {"email": "one.shot@example.com"}, format="json")
         invite = DoctorInvite.objects.get(email="one.shot@example.com")
         client = APIClient()
-        payload = {"token": invite.token, "password": "DoctorPass123!"}
+        payload = {"email": invite.email, "otp_code": invite.otp_code, "password": "DoctorPass123!"}
         first = client.post(reverse("doctor-invite-accept"), payload, format="json")
         second = client.post(reverse("doctor-invite-accept"), payload, format="json")
         assert first.status_code == status.HTTP_201_CREATED
@@ -181,7 +187,7 @@ class TestDoctorProvisioning:
         invite = DoctorInvite.objects.get(email="wannabe.admin2@example.com")
         client.post(
             reverse("doctor-invite-accept"),
-            {"token": invite.token, "password": "DoctorPass123!", "role": "admin"},
+            {"email": invite.email, "otp_code": invite.otp_code, "password": "DoctorPass123!", "role": "admin"},
             format="json",
         )
         created = User.objects.get(email="wannabe.admin2@example.com")

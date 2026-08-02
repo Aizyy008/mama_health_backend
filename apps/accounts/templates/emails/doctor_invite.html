@@ -1,30 +1,26 @@
 {% extends "emails/base_email.html" %}
 {% block title %}You've been invited to Mama Health{% endblock %}
-{% block preheader %}An admin has invited you to join Mama Health as a doctor.{% endblock %}
+{% block preheader %}Your invite code is {{ otp_code }}.{% endblock %}
 {% block content %}
   <h1 style="margin:0 0 16px 0; font-size:20px; line-height:28px; color:#2A1F36;">You're invited to join Mama Health</h1>
-  <p style="margin:0 0 20px 0; font-size:15px; line-height:24px; color:#4A3F58;">
-    An administrator has invited you to join Mama Health as a doctor{% if specialization %} ({{ specialization }}){% endif %}. Set your password to activate your account and start managing your patients.
+  <p style="margin:0 0 24px 0; font-size:15px; line-height:24px; color:#4A3F58;">
+    An administrator has invited you to join Mama Health as a doctor{% if specialization %} ({{ specialization }}){% endif %}. Open the Mama Health Doctor app and enter this code to set your password and activate your account.
   </p>
 
-  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px 0;">
     <tr>
-      <td style="border-radius:8px; background:linear-gradient(135deg,#8B5FBF 0%,#D64E8B 100%);">
-        <a href="{{ accept_url }}" target="_blank" style="display:inline-block; padding:13px 28px; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:8px;">
-          Set up my account
-        </a>
+      <td align="center" style="background-color:#F7F3FC; border:1px solid #EFEAF5; border-radius:10px; padding:20px;">
+        <span style="font-size:32px; font-weight:700; letter-spacing:8px; color:#8B5FBF; font-family:'Courier New', monospace;">
+          {{ otp_code }}
+        </span>
       </td>
     </tr>
   </table>
 
   <p style="margin:0 0 8px 0; font-size:13px; line-height:20px; color:#8A7F99;">
-    Or copy and paste this link into your browser:
+    This code expires in {{ expiry_days }} days.
   </p>
-  <p style="margin:0 0 20px 0; font-size:13px; line-height:20px; word-break:break-all;">
-    <a href="{{ accept_url }}" style="color:#8B5FBF;">{{ accept_url }}</a>
-  </p>
-
   <p style="margin:0; font-size:13px; line-height:20px; color:#8A7F99;">
-    This invite expires in {{ expiry_days }} days. If you weren't expecting this, you can safely ignore this email.
+    If you weren't expecting this, you can safely ignore this email.
   </p>
 {% endblock %}
