@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView, TokenRefreshView
 
 from apps.accounts import services
-from apps.accounts.models import DoctorProfile, PatientProfile, User
+from apps.accounts.models import DoctorProfile, PatientProfile, PlatformPaymentMethod, User
 from apps.accounts.serializers import (
     DoctorInviteAcceptSerializer,
     DoctorInviteSerializer,
@@ -13,6 +13,7 @@ from apps.accounts.serializers import (
     DoctorProfileSerializer,
     DoctorUpdateSerializer,
     MamaHealthTokenObtainPairSerializer,
+    MarkPatientPaidSerializer,
     MeSerializer,
     MeUpdateSerializer,
     PasswordChangeSerializer,
@@ -20,10 +21,13 @@ from apps.accounts.serializers import (
     PasswordResetSerializer,
     PasswordVerifyOTPResponseSerializer,
     PasswordVerifyOTPSerializer,
+    MySubscriptionResponseSerializer,
     PatientAssignDoctorSerializer,
     PatientListSerializer,
     PatientProfileSerializer,
+    PatientSubscriptionSerializer,
     PatientUpdateSerializer,
+    PlatformPaymentMethodSerializer,
     RegisterSerializer,
     ResendVerificationSerializer,
     VerifyEmailSerializer,
@@ -539,6 +543,104 @@ class MyDoctorProfileView(generics.RetrieveUpdateAPIView):
 
 @extend_schema(
     tags=["Accounts"],
+    summary="My subscription status (patient only)",
+    description=(
+        "Patient-only. Shows the free-trial/payment state used for the soft-lock (see "
+        "`IsPatientSubscriptionActive`): once `is_active` is `false`, clinical write actions "
+        "(logging health data, booking/rescheduling appointments, medicine reminders) are blocked "
+        "with a 403 until an admin marks the patient paid — reads and Emergency SOS are never "
+        "blocked. `payment_methods` is included so the app can show the patient where to send "
+        "payment without a second request."
+    ),
+    responses={200: MySubscriptionResponseSerializer},
+    examples=[
+        OpenApiExample(
+            "200 OK — still on trial",
+            value={
+                "trial_ends_at": "2026-08-09T10:30:00Z",
+                "is_paid": False,
+                "paid_at": None,
+                "payment_reference": "",
+                "is_active": True,
+                "days_remaining": 6,
+                "payment_methods": {
+                    "jazzcash_number": "0300-1234567",
+                    "jazzcash_account_title": "Mama Health",
+                    "easypaisa_number": "",
+                    "easypaisa_account_title": "",
+                    "bank_name": "Meezan Bank",
+                    "bank_account_title": "Mama Health",
+                    "bank_account_number": "01234567890123",
+                    "bank_iban": "PK00MEZN0001234567890123",
+                },
+            },
+            response_only=True,
+            status_codes=["200"],
+        ),
+    ],
+)
+class MySubscriptionView(generics.RetrieveAPIView):
+    serializer_class = PatientSubscriptionSerializer
+    permission_classes = [IsPatient]
+
+    def get_object(self):
+        profile, _ = PatientProfile.objects.get_or_create(user=self.request.user)
+        return profile
+
+    def retrieve(self, request, *args, **kwargs):
+        data = self.get_serializer(self.get_object()).data
+        data["payment_methods"] = PlatformPaymentMethodSerializer(PlatformPaymentMethod.load()).data
+        return Response(data)
+
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=["Accounts"],
+        summary="Get platform payment methods",
+        description="Any authenticated user — patients need this to know where to send payment. See `PATCH` below for who can change it.",
+        examples=[
+            OpenApiExample(
+                "200 OK",
+                value={
+                    "jazzcash_number": "0300-1234567",
+                    "jazzcash_account_title": "Mama Health",
+                    "easypaisa_number": "",
+                    "easypaisa_account_title": "",
+                    "bank_name": "Meezan Bank",
+                    "bank_account_title": "Mama Health",
+                    "bank_account_number": "01234567890123",
+                    "bank_iban": "PK00MEZN0001234567890123",
+                    "updated_at": "2026-08-02T10:00:00Z",
+                },
+                response_only=True,
+                status_codes=["200"],
+            )
+        ],
+    ),
+    patch=extend_schema(
+        tags=["Accounts"],
+        summary="Update platform payment methods (admin only)",
+        description="Admin-only. Leave a method's fields blank to hide it from what patients see — the app should only display methods with a non-empty number/account.",
+        examples=[
+            OpenApiExample("Request", value={"jazzcash_number": "0300-1234567", "jazzcash_account_title": "Mama Health"}, request_only=True),
+        ],
+    ),
+)
+class PaymentMethodView(generics.RetrieveUpdateAPIView):
+    serializer_class = PlatformPaymentMethodSerializer
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_object(self):
+        return PlatformPaymentMethod.load()
+
+    def get_permissions(self):
+        if self.request.method == "PATCH":
+            return [IsAdmin()]
+        return [permissions.IsAuthenticated()]
+
+
+@extend_schema(
+    tags=["Accounts"],
     summary="Invite a doctor (admin only)",
     description=(
         "Admin-only. Creates a pending `DoctorInvite` and emails an accept link "
@@ -632,7 +734,24 @@ class DoctorInviteAcceptView(generics.GenericAPIView):
     list=extend_schema(
         tags=["Accounts"],
         summary="List doctors",
-        description="Any authenticated role (patient/doctor/admin) — e.g. a patient browsing doctors to book an appointment with. Paginated.",
+        description=(
+            "Any authenticated role (patient/doctor/admin) — e.g. a patient browsing doctors to "
+            "book an appointment with. Paginated. Free city/area search, no paid maps API: "
+            "`?city=` matches one of the fixed dropdown values (see `DoctorProfile.city` choices, "
+            "e.g. `lahore`, `karachi`); `?area=` is a case-insensitive partial match on the "
+            "doctor's free-text area. `?lat=&lng=&radius_km=` (radius_km defaults to 20, results "
+            "sorted nearest-first) computes plain Haversine distance in Python to every doctor who "
+            "has set a location on their profile — no Google Places/Mapbox key needed. Combine "
+            "`city`/`area` with `lat`/`lng` to narrow first, then sort by distance. `distance_km` "
+            "is `null` unless `lat`/`lng` were supplied."
+        ),
+        parameters=[
+            OpenApiParameter(name="city", type=str, location=OpenApiParameter.QUERY, required=False, description="Exact match against the fixed city dropdown, e.g. `lahore`."),
+            OpenApiParameter(name="area", type=str, location=OpenApiParameter.QUERY, required=False, description="Case-insensitive partial match on the doctor's area, e.g. `DHA`."),
+            OpenApiParameter(name="lat", type=float, location=OpenApiParameter.QUERY, required=False, description="Patient's current latitude, for \"near me\" search."),
+            OpenApiParameter(name="lng", type=float, location=OpenApiParameter.QUERY, required=False, description="Patient's current longitude, for \"near me\" search."),
+            OpenApiParameter(name="radius_km", type=float, location=OpenApiParameter.QUERY, required=False, description="Only with lat/lng. Max distance in km. Default 20."),
+        ],
         examples=[
             OpenApiExample(
                 "200 OK",
@@ -655,13 +774,41 @@ class DoctorInviteAcceptView(generics.GenericAPIView):
                                 "years_of_experience": 8,
                                 "bio": "Board-certified obstetrician.",
                                 "is_accepting_patients": True,
+                                "city": "lahore",
+                                "area": "DHA Phase 5",
+                                "latitude": "31.470800",
+                                "longitude": "74.410400",
                             },
+                            "distance_km": None,
                         }
                     ],
                 },
                 response_only=True,
                 status_codes=["200"],
-            )
+            ),
+            OpenApiExample(
+                "200 OK — near-me search (?lat=&lng=)",
+                value={
+                    "count": 1,
+                    "next": None,
+                    "previous": None,
+                    "results": [
+                        {
+                            "id": 4,
+                            "email": "dr.ayesha@example.com",
+                            "first_name": "Ayesha",
+                            "last_name": "Malik",
+                            "phone_number": "+923009876543",
+                            "is_active": True,
+                            "date_joined": "2026-01-10T09:00:00Z",
+                            "doctor_profile": {"specialization": "OB-GYN", "license_number": "PMC-12345", "years_of_experience": 8, "bio": "", "is_accepting_patients": True, "city": "lahore", "area": "DHA Phase 5", "latitude": "31.470800", "longitude": "74.410400"},
+                            "distance_km": 2.35,
+                        }
+                    ],
+                },
+                response_only=True,
+                status_codes=["200"],
+            ),
         ],
     ),
     retrieve=extend_schema(
@@ -717,6 +864,38 @@ class DoctorViewSet(viewsets.ModelViewSet):
         if self.action in ("update", "partial_update"):
             return [IsAdmin()]
         return [permissions.IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = User.objects.filter(role=Role.DOCTOR).select_related("doctor_profile")
+        city = self.request.query_params.get("city")
+        if city:
+            qs = qs.filter(doctor_profile__city=city)
+        area = self.request.query_params.get("area")
+        if area:
+            qs = qs.filter(doctor_profile__area__icontains=area)
+
+        lat = self.request.query_params.get("lat")
+        lng = self.request.query_params.get("lng")
+        if lat and lng:
+            from apps.accounts.geo import haversine_km
+
+            try:
+                lat, lng = float(lat), float(lng)
+            except ValueError:
+                return qs.none()
+            radius_km = float(self.request.query_params.get("radius_km", 20))
+
+            nearby = []
+            for doctor in qs:
+                profile = getattr(doctor, "doctor_profile", None)
+                if profile and profile.latitude is not None and profile.longitude is not None:
+                    distance = haversine_km(lat, lng, float(profile.latitude), float(profile.longitude))
+                    if distance <= radius_km:
+                        doctor.distance_km = round(distance, 2)
+                        nearby.append(doctor)
+            nearby.sort(key=lambda d: d.distance_km)
+            return nearby
+        return qs
 
 
 _PATIENT_RESPONSE_EXAMPLE = {
@@ -799,7 +978,7 @@ class PatientViewSet(viewsets.ModelViewSet):
         return PatientListSerializer
 
     def get_permissions(self):
-        if self.action in ("partial_update", "assign_doctor"):
+        if self.action in ("partial_update", "assign_doctor", "mark_paid"):
             return [IsAdmin()]
         return [IsDoctorOrAdmin()]
 
@@ -867,3 +1046,34 @@ class PatientViewSet(viewsets.ModelViewSet):
         )
         doctor_label = doctor.get_full_name() or doctor.email
         return Response({"detail": f"{doctor_label} assigned to this patient."})
+
+    @extend_schema(
+        tags=["Accounts"],
+        summary="Mark a patient as paid (admin only)",
+        description=(
+            "Manual payment confirmation — this project uses no integrated payment gateway. The "
+            "admin checks their JazzCash/EasyPaisa/bank account for a matching transfer (see "
+            "`GET /accounts/payment-methods/` for the account details shown to the patient) and "
+            "marks them paid here, optionally noting a transaction reference. Once paid, the "
+            "patient's free-trial soft lock (see `GET /accounts/me/subscription/`) is permanently "
+            "lifted — there's no expiry/renewal logic since there's no automated payment "
+            "collection to expire it against."
+        ),
+        request=MarkPatientPaidSerializer,
+        examples=[
+            OpenApiExample("Request", value={"payment_reference": "JazzCash TXN482913"}, request_only=True),
+            OpenApiExample("200 OK", value={"detail": "Payment recorded. This patient now has full access."}, response_only=True, status_codes=["200"]),
+        ],
+    )
+    @action(detail=True, methods=["post"], url_path="mark-paid", permission_classes=[IsAdmin])
+    def mark_paid(self, request, pk=None):
+        patient = self.get_object()
+        serializer = MarkPatientPaidSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile, _ = PatientProfile.objects.get_or_create(user=patient)
+        services.mark_patient_paid(
+            patient_profile=profile,
+            admin=request.user,
+            payment_reference=serializer.validated_data["payment_reference"],
+        )
+        return Response({"detail": "Payment recorded. This patient now has full access."})

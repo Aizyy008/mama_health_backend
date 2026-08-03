@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from apps.accounts.models import DoctorProfile, PatientProfile, User
+from apps.accounts.models import DoctorProfile, PatientProfile, PlatformPaymentMethod, User
 from apps.ai_assistant.models import ChatMessage, ChatSession
 from apps.appointments import services as appointment_services
 from apps.appointments.models import Appointment
@@ -75,6 +75,7 @@ class Command(BaseCommand):
                 emergency_contact_phone="+923001112222",
                 address="House 12, Street 5, Karachi",
                 profile_complete=True,
+                trial_ends_at=timezone.now() + timedelta(days=7),
             ),
         )
         DoctorProfile.objects.update_or_create(
@@ -85,8 +86,13 @@ class Command(BaseCommand):
                 years_of_experience=8,
                 bio="Board-certified obstetrician with 8 years of experience.",
                 is_accepting_patients=True,
+                city="lahore",
+                area="DHA Phase 5",
+                latitude=31.4708,
+                longitude=74.4104,
             ),
         )
+        self._seed_payment_methods()
 
         self._seed_appointments(patient, doctor)
         self._seed_health_data(patient)
@@ -116,6 +122,18 @@ class Command(BaseCommand):
         user.set_password(TEST_PASSWORD)
         user.save()
         return user
+
+    def _seed_payment_methods(self):
+        payment_method = PlatformPaymentMethod.load()
+        if payment_method.jazzcash_number:
+            return
+        payment_method.jazzcash_number = "0300-1234567"
+        payment_method.jazzcash_account_title = "Mama Health"
+        payment_method.bank_name = "Meezan Bank"
+        payment_method.bank_account_title = "Mama Health"
+        payment_method.bank_account_number = "01234567890123"
+        payment_method.bank_iban = "PK00MEZN0001234567890123"
+        payment_method.save()
 
     def _seed_appointments(self, patient, doctor):
         if Appointment.objects.filter(patient=patient, doctor=doctor).exists():

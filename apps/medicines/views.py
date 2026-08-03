@@ -4,6 +4,7 @@ from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.accounts.subscriptions import IsPatientSubscriptionActive
 from apps.core.permissions import IsOwnerPatientOrAssignedDoctorOrAdmin
 from apps.core.viewsets import PatientOwnedCreateMixin, PatientScopedQuerysetMixin
 from apps.medicines.models import MedicineIntakeLog, MedicineReminder
@@ -56,7 +57,7 @@ _REMINDER_RESPONSE_EXAMPLE = {
 class MedicineReminderViewSet(PatientScopedQuerysetMixin, PatientOwnedCreateMixin, viewsets.ModelViewSet):
     serializer_class = MedicineReminderSerializer
     queryset = MedicineReminder.objects.select_related("patient")
-    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatientSubscriptionActive]
 
     @extend_schema(
         tags=[TAG],

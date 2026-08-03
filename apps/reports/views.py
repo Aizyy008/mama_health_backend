@@ -89,7 +89,10 @@ class PatientSummaryReportView(generics.GenericAPIView):
         "patient with an LMP date set, bucketed by current trimester (`unknown` = patients with a "
         "profile but no LMP date yet, e.g. not yet completed onboarding). `recent_activities` is a "
         "computed-on-read feed (not a stored log) of the most recent patient registrations, "
-        "appointment bookings, and SOS triggers, newest first."
+        "appointment bookings, and SOS triggers, newest first. `patients_paid`/`patients_on_trial`/"
+        "`patients_trial_expired` reflect the manual-payment subscription system (see "
+        "`GET /accounts/me/subscription/`) — `patients_trial_expired` is the count of patients "
+        "currently soft-locked out of clinical write actions."
     ),
     examples=[
         OpenApiExample(
@@ -108,6 +111,9 @@ class PatientSummaryReportView(generics.GenericAPIView):
                     {"type": "appointment_booked", "description": "Sara Ahmed booked an appointment with Dr. Ayesha Malik.", "timestamp": "2026-07-29T14:00:00Z"},
                     {"type": "patient_registered", "description": "Sara Ahmed registered as a patient.", "timestamp": "2026-01-15T10:30:00Z"},
                 ],
+                "patients_paid": 12,
+                "patients_on_trial": 98,
+                "patients_trial_expired": 18,
             },
             response_only=True,
             status_codes=["200"],

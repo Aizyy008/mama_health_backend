@@ -3,7 +3,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from apps.accounts import services
-from apps.accounts.models import DoctorInvite, DoctorProfile, PatientProfile, User
+from apps.accounts.models import DoctorInvite, DoctorProfile, PatientProfile, PlatformPaymentMethod, User
 from apps.core.constants import Role
 
 
@@ -128,7 +128,17 @@ class PatientProfileSerializer(serializers.ModelSerializer):
 class DoctorProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorProfile
-        fields = ["specialization", "license_number", "years_of_experience", "bio", "is_accepting_patients"]
+        fields = [
+            "specialization",
+            "license_number",
+            "years_of_experience",
+            "bio",
+            "is_accepting_patients",
+            "city",
+            "area",
+            "latitude",
+            "longitude",
+        ]
 
 
 class MeSerializer(serializers.ModelSerializer):
@@ -187,6 +197,7 @@ class DoctorInviteAcceptSerializer(serializers.Serializer):
 
 class DoctorListSerializer(serializers.ModelSerializer):
     doctor_profile = DoctorProfileSerializer(read_only=True)
+    distance_km = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -199,7 +210,14 @@ class DoctorListSerializer(serializers.ModelSerializer):
             "is_active",
             "date_joined",
             "doctor_profile",
+            "distance_km",
         ]
+
+    def get_distance_km(self, obj) -> float | None:
+        # Only populated for the ?lat=&lng= "near me" search — see
+        # DoctorViewSet.get_queryset, which annotates this attribute onto
+        # each result. None (and therefore omitted-looking) otherwise.
+        return getattr(obj, "distance_km", None)
 
 
 class DoctorUpdateSerializer(serializers.ModelSerializer):
@@ -217,8 +235,40 @@ class DoctorUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
+class PatientSubscriptionSerializer(serializers.ModelSerializer):
+    """
+    Read-only everywhere it's used — is_paid/paid_at/etc. are only ever
+    written server-side (accounts.services.mark_patient_paid), never
+    accepted directly from a request body, so this never appears as a
+    writable nested field on a patient-editable serializer (that would let
+    a patient grant themselves free access via their own profile PATCH).
+    """
+
+    is_active = serializers.SerializerMethodField()
+    days_remaining = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PatientProfile
+        fields = ["trial_ends_at", "is_paid", "paid_at", "payment_reference", "is_active", "days_remaining"]
+        read_only_fields = fields
+
+    def get_is_active(self, obj) -> bool:
+        from apps.accounts.subscriptions import has_active_subscription
+
+        return has_active_subscription(obj)
+
+    def get_days_remaining(self, obj) -> int | None:
+        if obj.is_paid or obj.trial_ends_at is None:
+            return None
+        from django.utils import timezone
+
+        remaining = (obj.trial_ends_at - timezone.now()).days
+        return max(remaining, 0)
+
+
 class PatientListSerializer(serializers.ModelSerializer):
     patient_profile = PatientProfileSerializer(read_only=True)
+    subscription = PatientSubscriptionSerializer(source="patient_profile", read_only=True)
 
     class Meta:
         model = User
@@ -231,6 +281,7 @@ class PatientListSerializer(serializers.ModelSerializer):
             "is_active",
             "date_joined",
             "patient_profile",
+            "subscription",
         ]
 
 
@@ -251,3 +302,36 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
 
 class PatientAssignDoctorSerializer(serializers.Serializer):
     doctor_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(role=Role.DOCTOR))
+
+
+class MarkPatientPaidSerializer(serializers.Serializer):
+    payment_reference = serializers.CharField(
+        required=False, allow_blank=True, default="", help_text="e.g. a JazzCash/EasyPaisa transaction ID."
+    )
+
+
+class PlatformPaymentMethodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlatformPaymentMethod
+        fields = [
+            "jazzcash_number",
+            "jazzcash_account_title",
+            "easypaisa_number",
+            "easypaisa_account_title",
+            "bank_name",
+            "bank_account_title",
+            "bank_account_number",
+            "bank_iban",
+            "updated_at",
+        ]
+        read_only_fields = ["updated_at"]
+
+
+class MySubscriptionResponseSerializer(PatientSubscriptionSerializer):
+    """Schema-only — adds payment_methods to PatientSubscriptionSerializer's fields for MySubscriptionView's response shape."""
+
+    payment_methods = PlatformPaymentMethodSerializer(read_only=True)
+
+    class Meta(PatientSubscriptionSerializer.Meta):
+        fields = PatientSubscriptionSerializer.Meta.fields + ["payment_methods"]
+        read_only_fields = fields

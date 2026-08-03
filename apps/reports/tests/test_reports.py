@@ -103,6 +103,22 @@ class TestAdminStats:
         assert dist["trimester_3"] == 1
         assert dist["unknown"] == 1
 
+    def test_stats_reflect_subscription_counts(self, admin_client):
+        paid = PatientUserFactory()
+        paid.patient_profile.is_paid = True
+        paid.patient_profile.save()
+
+        expired = PatientUserFactory()
+        expired.patient_profile.trial_ends_at = timezone.now() - timedelta(days=1)
+        expired.patient_profile.save()
+
+        PatientUserFactory()  # on active trial (factory default)
+
+        resp = admin_client.get(reverse("report-admin-stats"))
+        assert resp.data["patients_paid"] == 1
+        assert resp.data["patients_trial_expired"] == 1
+        assert resp.data["patients_on_trial"] == 1
+
 
 class TestGlobalSearch:
     def test_search_requires_admin(self, patient_client, doctor_client):

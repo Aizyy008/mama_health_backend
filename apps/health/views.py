@@ -5,6 +5,7 @@ from rest_framework import generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.accounts.subscriptions import IsPatientSubscriptionActive
 from apps.core.permissions import IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatient
 from apps.core.serializers import DetailResponseSerializer
 from apps.core.utils import resolve_patient_from_request
@@ -78,7 +79,7 @@ _BP_READING_EXAMPLE = {
 class BloodPressureReadingViewSet(PatientScopedQuerysetMixin, PatientOwnedCreateMixin, viewsets.ModelViewSet):
     serializer_class = BloodPressureReadingSerializer
     queryset = BloodPressureReading.objects.select_related("patient")
-    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatientSubscriptionActive]
 
 
 _SUGAR_READING_EXAMPLE = {
@@ -115,7 +116,7 @@ _SUGAR_READING_EXAMPLE = {
 class BloodSugarReadingViewSet(PatientScopedQuerysetMixin, PatientOwnedCreateMixin, viewsets.ModelViewSet):
     serializer_class = BloodSugarReadingSerializer
     queryset = BloodSugarReading.objects.select_related("patient")
-    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatientSubscriptionActive]
 
 
 _SYMPTOM_LOG_EXAMPLE = {
@@ -162,7 +163,7 @@ class SymptomLogViewSet(PatientScopedQuerysetMixin, PatientOwnedCreateMixin, vie
 
     serializer_class = SymptomLogSerializer
     queryset = SymptomLog.objects.select_related("patient").prefetch_related("symptoms")
-    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatientSubscriptionActive]
 
 
 _WATER_ENTRY_EXAMPLE = {"id": 102, "patient": {"id": 2, "email": "sara.ahmed@example.com", "first_name": "Sara", "last_name": "Ahmed"}, "amount_ml": 250, "logged_at": "2026-07-29T11:00:00Z", "log_date": "2026-07-29", "created_at": "2026-07-29T11:00:00Z"}
@@ -190,7 +191,7 @@ class WaterIntakeEntryViewSet(PatientScopedQuerysetMixin, PatientOwnedCreateMixi
 
     serializer_class = WaterIntakeEntrySerializer
     queryset = WaterIntakeEntry.objects.select_related("patient")
-    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatientSubscriptionActive]
     http_method_names = ["get", "post", "head", "options"]
 
     @extend_schema(
@@ -250,7 +251,7 @@ _KICK_SESSION_EXAMPLE = {"id": 7, "patient": {"id": 2, "email": "sara.ahmed@exam
 class KickCountSessionViewSet(PatientScopedQuerysetMixin, PatientOwnedCreateMixin, viewsets.ModelViewSet):
     serializer_class = KickCountSessionSerializer
     queryset = KickCountSession.objects.select_related("patient").prefetch_related("events")
-    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatientSubscriptionActive]
     http_method_names = ["get", "post", "head", "options"]
 
     @extend_schema(
@@ -406,7 +407,7 @@ class SurgicalProcedureRecordViewSet(
 ):
     serializer_class = SurgicalProcedureRecordSerializer
     queryset = SurgicalProcedureRecord.objects.select_related("patient")
-    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerPatientOrAssignedDoctorOrAdmin, IsPatientSubscriptionActive]
 
 
 @extend_schema_view(

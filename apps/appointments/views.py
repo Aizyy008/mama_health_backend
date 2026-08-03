@@ -4,6 +4,7 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.accounts.subscriptions import IsPatientSubscriptionActive
 from apps.appointments import services
 from apps.appointments.models import Appointment
 from apps.appointments.permissions import IsAppointmentParticipantOrAdmin
@@ -111,7 +112,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
     queryset = Appointment.objects.select_related("patient", "doctor")  # for schema introspection only
     http_method_names = ["get", "post", "patch", "head", "options"]
-    permission_classes = [permissions.IsAuthenticated, IsAppointmentParticipantOrAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsAppointmentParticipantOrAdmin, IsPatientSubscriptionActive]
 
     def get_queryset(self):
         qs = Appointment.objects.select_related("patient", "doctor")

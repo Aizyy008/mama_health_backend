@@ -291,6 +291,10 @@ PASSWORD_RESET_TOKEN_EXPIRY_HOURS = env.int("PASSWORD_RESET_TOKEN_EXPIRY_HOURS",
 PASSWORD_RESET_OTP_EXPIRY_MINUTES = env.int("PASSWORD_RESET_OTP_EXPIRY_MINUTES", default=10)
 DOCTOR_INVITE_EXPIRY_DAYS = env.int("DOCTOR_INVITE_EXPIRY_DAYS", default=7)
 
+# Patient free trial before manual-payment enforcement kicks in (soft lock —
+# see apps/accounts/subscriptions.py). Doctors/admins are never subject to this.
+PATIENT_TRIAL_DAYS = env.int("PATIENT_TRIAL_DAYS", default=7)
+
 # ---------------------------------------------------------------------------
 # Pluggable third-party integrations — all credentials optional at boot.
 # Each app's adapter factory checks these for presence and falls back to a

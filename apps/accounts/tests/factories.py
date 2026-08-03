@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 import factory
+from django.utils import timezone
 
 from apps.accounts.models import DoctorProfile, PatientProfile, User
 from apps.core.constants import Role
@@ -27,8 +30,14 @@ class PatientUserFactory(UserFactory):
 
     @factory.post_generation
     def profile(self, create, extracted, **kwargs):
+        # Defaults to an active trial (matches a freshly registered patient
+        # via accounts.services.register_patient) so tests don't need to
+        # think about the subscription soft lock unless they're explicitly
+        # testing it — see TestSubscriptionSoftLock.
         if create:
-            PatientProfile.objects.get_or_create(user=self)
+            PatientProfile.objects.get_or_create(
+                user=self, defaults={"trial_ends_at": timezone.now() + timedelta(days=7)}
+            )
 
 
 class DoctorUserFactory(UserFactory):

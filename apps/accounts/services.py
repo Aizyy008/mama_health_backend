@@ -35,7 +35,8 @@ def register_patient(*, email, password, first_name="", last_name="", phone_numb
         phone_number=phone_number,
         is_email_verified=False,
     )
-    PatientProfile.objects.create(user=user)
+    trial_ends_at = timezone.now() + timedelta(days=settings.PATIENT_TRIAL_DAYS)
+    PatientProfile.objects.create(user=user, trial_ends_at=trial_ends_at)
     send_email_verification(user)
     return user
 
@@ -254,3 +255,12 @@ def accept_doctor_invite(
     invite.status = DoctorInvite.Status.ACCEPTED
     invite.save(update_fields=["status"])
     return user
+
+
+def mark_patient_paid(*, patient_profile, admin: User, payment_reference: str = "") -> None:
+    """Admin manually confirming a JazzCash/EasyPaisa/bank transfer happened outside the app."""
+    patient_profile.is_paid = True
+    patient_profile.paid_at = timezone.now()
+    patient_profile.paid_by = admin
+    patient_profile.payment_reference = payment_reference
+    patient_profile.save(update_fields=["is_paid", "paid_at", "paid_by", "payment_reference"])

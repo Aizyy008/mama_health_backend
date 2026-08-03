@@ -503,3 +503,166 @@ class TestProfileUpdate:
         patient_user.refresh_from_db()
         assert patient_user.role == Role.PATIENT
         assert patient_user.email == original_email
+
+
+class TestDoctorLocationSearch:
+    def test_filter_by_city(self, patient_client):
+        lahore_doc = DoctorUserFactory()
+        lahore_doc.doctor_profile.city = "lahore"
+        lahore_doc.doctor_profile.save()
+        DoctorUserFactory()  # blank city — must not appear
+
+        resp = patient_client.get(reverse("doctor-list"), {"city": "lahore"})
+        assert resp.status_code == status.HTTP_200_OK
+        returned_ids = {row["id"] for row in resp.data["results"]}
+        assert returned_ids == {lahore_doc.id}
+
+    def test_filter_by_area_case_insensitive_partial_match(self, patient_client):
+        dha_doc = DoctorUserFactory()
+        dha_doc.doctor_profile.area = "DHA Phase 5"
+        dha_doc.doctor_profile.save()
+        DoctorUserFactory()  # blank area — must not appear
+
+        resp = patient_client.get(reverse("doctor-list"), {"area": "dha"})
+        assert resp.status_code == status.HTTP_200_OK
+        returned_ids = {row["id"] for row in resp.data["results"]}
+        assert returned_ids == {dha_doc.id}
+
+    def test_near_me_search_sorts_by_distance_and_respects_radius(self, patient_client):
+        # Roughly Lahore coordinates as the patient's location
+        patient_lat, patient_lng = 31.5204, 74.3587
+
+        close_doc = DoctorUserFactory()
+        close_doc.doctor_profile.latitude = 31.5300
+        close_doc.doctor_profile.longitude = 74.3600
+        close_doc.doctor_profile.save()
+
+        far_doc = DoctorUserFactory()
+        far_doc.doctor_profile.latitude = 24.8607  # Karachi — ~1200km away
+        far_doc.doctor_profile.longitude = 67.0099
+        far_doc.doctor_profile.save()
+
+        no_location_doc = DoctorUserFactory()  # no lat/lng at all — must be excluded
+
+        resp = patient_client.get(
+            reverse("doctor-list"), {"lat": patient_lat, "lng": patient_lng, "radius_km": 50}
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        returned_ids = [row["id"] for row in resp.data["results"]]
+        assert returned_ids == [close_doc.id]
+        assert resp.data["results"][0]["distance_km"] is not None
+        assert far_doc.id not in returned_ids
+        assert no_location_doc.id not in returned_ids
+
+    def test_distance_km_is_null_without_lat_lng(self, patient_client):
+        DoctorUserFactory()
+        resp = patient_client.get(reverse("doctor-list"))
+        assert resp.data["results"][0]["distance_km"] is None
+
+
+class TestSubscriptionSoftLock:
+    def test_subscription_status_reflects_active_trial(self, patient_client):
+        resp = patient_client.get(reverse("my-subscription"))
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["is_active"] is True
+        assert resp.data["is_paid"] is False
+        assert "payment_methods" in resp.data
+
+    def test_expired_unpaid_patient_blocked_from_creating_health_record(self, patient_client, patient_user):
+        patient_user.patient_profile.trial_ends_at = timezone.now() - timedelta(days=1)
+        patient_user.patient_profile.save()
+
+        resp = patient_client.post(
+            reverse("blood-pressure-list"), {"systolic": 120, "diastolic": 80}, format="json"
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_expired_unpaid_patient_can_still_read(self, patient_client, patient_user):
+        patient_user.patient_profile.trial_ends_at = timezone.now() - timedelta(days=1)
+        patient_user.patient_profile.save()
+
+        resp = patient_client.get(reverse("blood-pressure-list"))
+        assert resp.status_code == status.HTTP_200_OK
+
+    def test_paid_patient_is_never_blocked_even_past_trial(self, patient_client, patient_user):
+        patient_user.patient_profile.trial_ends_at = timezone.now() - timedelta(days=1)
+        patient_user.patient_profile.is_paid = True
+        patient_user.patient_profile.save()
+
+        resp = patient_client.post(
+            reverse("blood-pressure-list"), {"systolic": 120, "diastolic": 80}, format="json"
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    def test_expired_patient_can_still_trigger_emergency_sos(self, patient_client, patient_user):
+        patient_user.patient_profile.trial_ends_at = timezone.now() - timedelta(days=1)
+        patient_user.patient_profile.save()
+
+        resp = patient_client.post(reverse("emergency-sos-list"), {}, format="json")
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    def test_doctor_or_admin_booking_for_expired_patient_is_not_blocked(self, admin_client, patient_user, doctor_user):
+        patient_user.patient_profile.trial_ends_at = timezone.now() - timedelta(days=1)
+        patient_user.patient_profile.save()
+
+        resp = admin_client.post(
+            reverse("appointment-list"),
+            {
+                "patient_id": patient_user.id,
+                "doctor_id": doctor_user.id,
+                "appointment_type": "in_person",
+                "scheduled_at": (timezone.now() + timedelta(days=1)).isoformat(),
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+
+    def test_admin_mark_paid_lifts_the_lock(self, admin_client, patient_client, patient_user):
+        patient_user.patient_profile.trial_ends_at = timezone.now() - timedelta(days=1)
+        patient_user.patient_profile.save()
+
+        resp = admin_client.post(
+            reverse("patient-mark-paid", args=[patient_user.id]),
+            {"payment_reference": "JazzCash TXN12345"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        patient_user.patient_profile.refresh_from_db()
+        assert patient_user.patient_profile.is_paid is True
+        assert patient_user.patient_profile.payment_reference == "JazzCash TXN12345"
+
+        create_resp = patient_client.post(
+            reverse("blood-pressure-list"), {"systolic": 120, "diastolic": 80}, format="json"
+        )
+        assert create_resp.status_code == status.HTTP_201_CREATED
+
+    def test_only_admin_can_mark_paid(self, doctor_client, patient_user):
+        resp = doctor_client.post(
+            reverse("patient-mark-paid", args=[patient_user.id]), {}, format="json"
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+
+class TestPaymentMethods:
+    def test_any_authenticated_role_can_read(self, patient_client, doctor_client, admin_client):
+        assert patient_client.get(reverse("payment-methods")).status_code == status.HTTP_200_OK
+        assert doctor_client.get(reverse("payment-methods")).status_code == status.HTTP_200_OK
+        assert admin_client.get(reverse("payment-methods")).status_code == status.HTTP_200_OK
+
+    def test_only_admin_can_update(self, doctor_client, admin_client):
+        assert (
+            doctor_client.patch(reverse("payment-methods"), {"jazzcash_number": "0300-0000000"}, format="json").status_code
+            == status.HTTP_403_FORBIDDEN
+        )
+        resp = admin_client.patch(
+            reverse("payment-methods"),
+            {"jazzcash_number": "0300-1234567", "jazzcash_account_title": "Mama Health"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["jazzcash_number"] == "0300-1234567"
+
+    def test_updated_details_visible_to_patients(self, admin_client, patient_client):
+        admin_client.patch(reverse("payment-methods"), {"bank_name": "Meezan Bank"}, format="json")
+        resp = patient_client.get(reverse("payment-methods"))
+        assert resp.data["bank_name"] == "Meezan Bank"

@@ -50,6 +50,9 @@ class AdminStatsSerializer(serializers.Serializer):
     new_patients_this_week = serializers.IntegerField()
     trimester_distribution = TrimesterDistributionSerializer()
     recent_activities = RecentActivitySerializer(many=True)
+    patients_paid = serializers.IntegerField()
+    patients_on_trial = serializers.IntegerField()
+    patients_trial_expired = serializers.IntegerField()
 
 
 class SearchResultsSerializer(serializers.Serializer):

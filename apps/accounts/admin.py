@@ -7,6 +7,7 @@ from apps.accounts.models import (
     EmailVerificationToken,
     PasswordResetToken,
     PatientProfile,
+    PlatformPaymentMethod,
     User,
 )
 
@@ -33,3 +34,4 @@ admin.site.register(DoctorProfile)
 admin.site.register(DoctorInvite)
 admin.site.register(EmailVerificationToken)
 admin.site.register(PasswordResetToken)
+admin.site.register(PlatformPaymentMethod)

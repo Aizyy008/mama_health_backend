@@ -47,7 +47,7 @@ def build_patient_summary(patient) -> dict:
 
 
 def build_admin_stats() -> dict:
-    from apps.accounts.models import User
+    from apps.accounts.models import PatientProfile, User
     from apps.core.constants import Role
     from apps.emergency.models import EmergencySOSEvent
 
@@ -66,6 +66,9 @@ def build_admin_stats() -> dict:
         "new_patients_this_week": User.objects.filter(role=Role.PATIENT, date_joined__gte=week_ago).count(),
         "trimester_distribution": _build_trimester_distribution(),
         "recent_activities": build_recent_activities(),
+        "patients_paid": PatientProfile.objects.filter(is_paid=True).count(),
+        "patients_on_trial": PatientProfile.objects.filter(is_paid=False, trial_ends_at__gte=now).count(),
+        "patients_trial_expired": PatientProfile.objects.filter(is_paid=False, trial_ends_at__lt=now).count(),
     }
 
 
