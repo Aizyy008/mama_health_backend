@@ -298,15 +298,20 @@ _DUMMY_DOCTORS = [
 ]
 
 
+DUMMY_DOCTOR_PASSWORD = "TestPass123!"
+
+
 def seed_dummy_doctors() -> list[User]:
     """
     Frontend-integration convenience, not a general-purpose feature: creates
     a couple of clearly-marked (@mamahealth-test.app) dummy doctors directly
     (bypassing the normal invite flow, which needs a real inbox to receive
-    the OTP) so Saad's Flutter app has something to list/search against
-    before real doctors are onboarded. Idempotent — safe to call more than
-    once. Delete these via Django admin before handing admin access to the
-    client (they're identifiable by the @mamahealth-test.app email domain).
+    the OTP) so Saad's Flutter app has something to list/search against —
+    and log in as, via DUMMY_DOCTOR_PASSWORD — before real doctors are
+    onboarded. Idempotent — safe to call more than once (also re-applies
+    the known password, in case it was ever changed). Delete these via
+    Django admin before handing admin access to the client (identifiable
+    by the @mamahealth-test.app email domain).
     """
     users = []
     for data in _DUMMY_DOCTORS:
@@ -315,13 +320,12 @@ def seed_dummy_doctors() -> list[User]:
             for key in ("specialization", "license_number", "years_of_experience", "bio", "city", "area", "latitude", "longitude")
         }
         user_fields = {key: data[key] for key in ("first_name", "last_name", "phone_number")}
-        user, created = User.objects.get_or_create(
+        user, _ = User.objects.get_or_create(
             email=data["email"],
             defaults={**user_fields, "role": Role.DOCTOR, "is_email_verified": True, "is_active": True},
         )
-        if created:
-            user.set_unusable_password()
-            user.save()
+        user.set_password(DUMMY_DOCTOR_PASSWORD)
+        user.save()
         DoctorProfile.objects.update_or_create(user=user, defaults=profile_fields)
         users.append(user)
     return users
