@@ -264,3 +264,64 @@ def mark_patient_paid(*, patient_profile, admin: User, payment_reference: str = 
     patient_profile.paid_by = admin
     patient_profile.payment_reference = payment_reference
     patient_profile.save(update_fields=["is_paid", "paid_at", "paid_by", "payment_reference"])
+
+
+_DUMMY_DOCTORS = [
+    {
+        "email": "dummy.doctor1@mamahealth-test.app",
+        "first_name": "Ayesha",
+        "last_name": "Malik",
+        "phone_number": "+923001234567",
+        "specialization": "OB-GYN",
+        "license_number": "PMC-00001",
+        "years_of_experience": 8,
+        "bio": "Dummy test doctor — safe to delete once real doctors are onboarded.",
+        "city": "lahore",
+        "area": "DHA Phase 5",
+        "latitude": 31.4708,
+        "longitude": 74.4104,
+    },
+    {
+        "email": "dummy.doctor2@mamahealth-test.app",
+        "first_name": "Sana",
+        "last_name": "Khan",
+        "phone_number": "+923007654321",
+        "specialization": "Gynecologist",
+        "license_number": "PMC-00002",
+        "years_of_experience": 5,
+        "bio": "Dummy test doctor — safe to delete once real doctors are onboarded.",
+        "city": "karachi",
+        "area": "Clifton",
+        "latitude": 24.8138,
+        "longitude": 67.0300,
+    },
+]
+
+
+def seed_dummy_doctors() -> list[User]:
+    """
+    Frontend-integration convenience, not a general-purpose feature: creates
+    a couple of clearly-marked (@mamahealth-test.app) dummy doctors directly
+    (bypassing the normal invite flow, which needs a real inbox to receive
+    the OTP) so Saad's Flutter app has something to list/search against
+    before real doctors are onboarded. Idempotent — safe to call more than
+    once. Delete these via Django admin before handing admin access to the
+    client (they're identifiable by the @mamahealth-test.app email domain).
+    """
+    users = []
+    for data in _DUMMY_DOCTORS:
+        profile_fields = {
+            key: data[key]
+            for key in ("specialization", "license_number", "years_of_experience", "bio", "city", "area", "latitude", "longitude")
+        }
+        user_fields = {key: data[key] for key in ("first_name", "last_name", "phone_number")}
+        user, created = User.objects.get_or_create(
+            email=data["email"],
+            defaults={**user_fields, "role": Role.DOCTOR, "is_email_verified": True, "is_active": True},
+        )
+        if created:
+            user.set_unusable_password()
+            user.save()
+        DoctorProfile.objects.update_or_create(user=user, defaults=profile_fields)
+        users.append(user)
+    return users
