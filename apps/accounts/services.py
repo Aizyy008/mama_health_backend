@@ -298,7 +298,7 @@ _DUMMY_DOCTORS = [
 ]
 
 
-DUMMY_DOCTOR_PASSWORD = "TestPass123!"
+DUMMY_ACCOUNT_PASSWORD = "TestPass123!"
 
 
 def seed_dummy_doctors() -> list[User]:
@@ -307,7 +307,7 @@ def seed_dummy_doctors() -> list[User]:
     a couple of clearly-marked (@mamahealth-test.app) dummy doctors directly
     (bypassing the normal invite flow, which needs a real inbox to receive
     the OTP) so Saad's Flutter app has something to list/search against —
-    and log in as, via DUMMY_DOCTOR_PASSWORD — before real doctors are
+    and log in as, via DUMMY_ACCOUNT_PASSWORD — before real doctors are
     onboarded. Idempotent — safe to call more than once (also re-applies
     the known password, in case it was ever changed). Delete these via
     Django admin before handing admin access to the client (identifiable
@@ -324,8 +324,75 @@ def seed_dummy_doctors() -> list[User]:
             email=data["email"],
             defaults={**user_fields, "role": Role.DOCTOR, "is_email_verified": True, "is_active": True},
         )
-        user.set_password(DUMMY_DOCTOR_PASSWORD)
+        user.set_password(DUMMY_ACCOUNT_PASSWORD)
         user.save()
         DoctorProfile.objects.update_or_create(user=user, defaults=profile_fields)
         users.append(user)
     return users
+
+
+def seed_dummy_patient_appointment_and_sos() -> dict:
+    """
+    Follow-up to seed_dummy_doctors: Saad also needed one appointment and
+    one SOS event to test those list screens, and there was no patient in
+    production to attach them to (patients only ever exist via real
+    self-registration). Creates one clearly-marked
+    (@mamahealth-test.app) dummy patient — real login via
+    DUMMY_ACCOUNT_PASSWORD, same as the dummy doctors — with one
+    appointment against the first dummy doctor and one active Emergency
+    SOS event. Idempotent. Delete via Django admin (identifiable by the
+    @mamahealth-test.app email domain) before handing admin access to
+    the client, same as the dummy doctors.
+    """
+    from datetime import date
+
+    from apps.appointments import services as appointment_services
+    from apps.appointments.models import Appointment
+    from apps.emergency.models import EmergencySOSEvent
+
+    doctors = seed_dummy_doctors()
+    doctor = doctors[0]
+
+    patient, _ = User.objects.get_or_create(
+        email="dummy.patient1@mamahealth-test.app",
+        defaults={
+            "first_name": "Sara",
+            "last_name": "Ahmed",
+            "phone_number": "+923001112222",
+            "role": Role.PATIENT,
+            "is_email_verified": True,
+            "is_active": True,
+        },
+    )
+    patient.set_password(DUMMY_ACCOUNT_PASSWORD)
+    patient.save()
+    PatientProfile.objects.update_or_create(
+        user=patient,
+        defaults={
+            "date_of_birth": date(1995, 6, 20),
+            "lmp_date": date.today() - timedelta(weeks=12),
+            "blood_group": "O+",
+            "profile_complete": True,
+            "trial_ends_at": timezone.now() + timedelta(days=7),
+        },
+    )
+
+    if not Appointment.objects.filter(patient=patient, doctor=doctor).exists():
+        appointment_services.book_appointment(
+            patient=patient,
+            doctor=doctor,
+            appointment_type="in_person",
+            scheduled_at=timezone.now() + timedelta(days=2),
+            reason="Routine checkup (dummy seed data for frontend testing)",
+        )
+
+    EmergencySOSEvent.objects.get_or_create(
+        patient=patient,
+        notes="Dummy SOS event for frontend testing — safe to delete.",
+        defaults={
+            "status": EmergencySOSEvent.Status.ACTIVE,
+            "latitude": 31.4708,
+            "longitude": 74.4104,
+        },
+    )
+    return {"patient": patient, "doctor": doctor}

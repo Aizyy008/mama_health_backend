@@ -18,7 +18,7 @@ def _task_registry():
     # apps.core — loaded first, before every other app — never has to import
     # apps.notifications/apps.accounts at Django startup time, only when this
     # view is actually hit.
-    from apps.accounts.services import seed_dummy_doctors
+    from apps.accounts.services import seed_dummy_doctors, seed_dummy_patient_appointment_and_sos
     from apps.notifications.tasks import (
         cleanup_expired_invites_and_tokens,
         send_appointment_reminders,
@@ -31,6 +31,7 @@ def _task_registry():
         "appointment-reminders": send_appointment_reminders,
         "weekly-pregnancy-update": send_weekly_pregnancy_update,
         "cleanup-tokens": cleanup_expired_invites_and_tokens,
+        "seed-dummy-patient-data": seed_dummy_patient_appointment_and_sos,
         # One-off, not on the GitHub Actions schedule — triggered manually
         # once for frontend-integration convenience. See docstring.
         "seed-dummy-doctors": seed_dummy_doctors,
