@@ -1855,6 +1855,69 @@ paths:
                     updated_at: '2026-07-29T14:00:00Z'
                   summary: 200 OK
           description: ''
+  /api/v1/appointments/{id}/rate/:
+    post:
+      operationId: appointments_rate_create
+      description: Patient-only, and only the appointment's own patient. Only allowed
+        once the appointment is `completed` (400 otherwise), and only once per appointment
+        (400 on a second attempt) — this is the data behind a doctor's `average_rating`/`total_ratings`
+        (see `GET /accounts/doctors/`) and the admin dashboard's `average_doctor_rating`.
+      summary: Rate a completed appointment (patient only)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this appointment.
+        required: true
+      tags:
+      - Appointments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorRatingRequest'
+            examples:
+              Request:
+                value:
+                  score: 5
+                  comment: Very attentive and explained everything clearly.
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DoctorRatingRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DoctorRatingRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorRating'
+              examples:
+                201Created:
+                  value:
+                    id: 1
+                    score: 5
+                    comment: Very attentive and explained everything clearly.
+                    created_at: '2026-08-06T10:00:00Z'
+                  summary: 201 Created
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailResponse'
+              examples:
+                400NotCompletedYet:
+                  value:
+                    detail: Only completed appointments can be rated.
+                    errors: null
+                  summary: 400 Not completed yet
+          description: ''
   /api/v1/appointments/{id}/reschedule/:
     patch:
       operationId: appointments_reschedule_partial_update
@@ -2172,32 +2235,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/health/blood-pressure/{id}/:
-    delete:
-      operationId: health_blood_pressure_destroy
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted by default, or narrowed to one patient via
-            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
-            full record — without this, admin would see every patient's rows
-            mixed together with no way to filter to just one)
-      summary: Delete a blood pressure reading
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this blood pressure reading.
-        required: true
-      tags:
-      - Health
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: health_blood_pressure_update
       description: |-
@@ -2285,6 +2322,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/BloodPressureReading'
           description: ''
+    delete:
+      operationId: health_blood_pressure_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Delete a blood pressure reading
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood pressure reading.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
     get:
       operationId: health_blood_pressure_retrieve
       description: |-
@@ -2444,32 +2507,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/health/blood-sugar/{id}/:
-    delete:
-      operationId: health_blood_sugar_destroy
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted by default, or narrowed to one patient via
-            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
-            full record — without this, admin would see every patient's rows
-            mixed together with no way to filter to just one)
-      summary: Delete a blood sugar reading
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this blood sugar reading.
-        required: true
-      tags:
-      - Health
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: health_blood_sugar_update
       description: |-
@@ -2557,6 +2594,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/BloodSugarReading'
           description: ''
+    delete:
+      operationId: health_blood_sugar_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Delete a blood sugar reading
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this blood sugar reading.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
     get:
       operationId: health_blood_sugar_retrieve
       description: |-
@@ -2718,24 +2781,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/health/symptoms/{id}/:
-    delete:
-      operationId: health_symptoms_destroy
-      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
-      summary: Delete a symptom log
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this symptom log.
-        required: true
-      tags:
-      - Health
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: health_symptoms_update
       description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
@@ -2809,6 +2854,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/SymptomLog'
           description: ''
+    delete:
+      operationId: health_symptoms_destroy
+      description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
+      summary: Delete a symptom log
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this symptom log.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
     get:
       operationId: health_symptoms_retrieve
       description: POST upserts by (patient, log_date) — one entry per day, see SymptomLogSerializer.create().
@@ -3484,32 +3547,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/health/surgical-procedures/{id}/:
-    delete:
-      operationId: health_surgical_procedures_destroy
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted by default, or narrowed to one patient via
-            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
-            full record — without this, admin would see every patient's rows
-            mixed together with no way to filter to just one)
-      summary: Delete a surgical procedure record
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this surgical procedure record.
-        required: true
-      tags:
-      - Health
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: health_surgical_procedures_update
       description: |-
@@ -3597,6 +3634,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/SurgicalProcedureRecord'
           description: ''
+    delete:
+      operationId: health_surgical_procedures_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Delete a surgical procedure record
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this surgical procedure record.
+        required: true
+      tags:
+      - Health
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
     get:
       operationId: health_surgical_procedures_retrieve
       description: |-
@@ -3941,25 +4004,6 @@ paths:
                   summary: 404 No active plan
           description: ''
   /api/v1/diet/plans/{id}/:
-    delete:
-      operationId: diet_plans_destroy
-      description: Doctor/admin authored; patient is read-only (never creates/edits
-        their own plan).
-      summary: Delete a diet plan (doctor/admin only)
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this diet plan.
-        required: true
-      tags:
-      - Diet
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: diet_plans_update
       description: Doctor/admin authored; patient is read-only (never creates/edits
@@ -4034,6 +4078,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/DietPlan'
           description: ''
+    delete:
+      operationId: diet_plans_destroy
+      description: Doctor/admin authored; patient is read-only (never creates/edits
+        their own plan).
+      summary: Delete a diet plan (doctor/admin only)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this diet plan.
+        required: true
+      tags:
+      - Diet
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
     get:
       operationId: diet_plans_retrieve
       description: Doctor/admin authored; patient is read-only (never creates/edits
@@ -4219,32 +4282,6 @@ paths:
                   summary: 201 Created
           description: ''
   /api/v1/medicines/reminders/{id}/:
-    delete:
-      operationId: medicines_reminders_destroy
-      description: |-
-        Scopes a viewset's queryset by the requesting user's role, for any model
-        with a FK to the patient (default field name "patient"):
-          - PATIENT: only their own records
-          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
-          - ADMIN: unrestricted by default, or narrowed to one patient via
-            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
-            full record — without this, admin would see every patient's rows
-            mixed together with no way to filter to just one)
-      summary: Delete a medicine reminder
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this medicine reminder.
-        required: true
-      tags:
-      - Medicines
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
     put:
       operationId: medicines_reminders_update
       description: |-
@@ -4325,6 +4362,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/MedicineReminder'
           description: ''
+    delete:
+      operationId: medicines_reminders_destroy
+      description: |-
+        Scopes a viewset's queryset by the requesting user's role, for any model
+        with a FK to the patient (default field name "patient"):
+          - PATIENT: only their own records
+          - DOCTOR: only records of patients assigned to them (PatientDoctorAssignment)
+          - ADMIN: unrestricted by default, or narrowed to one patient via
+            `?patient_id=` (e.g. an admin dashboard viewing a single patient's
+            full record — without this, admin would see every patient's rows
+            mixed together with no way to filter to just one)
+      summary: Delete a medicine reminder
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this medicine reminder.
+        required: true
+      tags:
+      - Medicines
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
     get:
       operationId: medicines_reminders_retrieve
       description: |-
@@ -4704,6 +4767,27 @@ paths:
                 200OK:
                   value:
                     detail: 3 notification(s) marked as read.
+                  summary: 200 OK
+          description: ''
+  /api/v1/notifications/unread-count/:
+    get:
+      operationId: notifications_unread_count_retrieve
+      description: For a notification-bell badge — own inbox only.
+      summary: Unread notification count
+      tags:
+      - Notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCount'
+              examples:
+                200OK:
+                  value:
+                    unread_count: 8
                   summary: 200 OK
           description: ''
   /api/v1/notifications/{id}/:
@@ -5315,8 +5399,28 @@ paths:
         first. `patients_paid`/`patients_on_trial`/`patients_trial_expired` reflect
         the manual-payment subscription system (see `GET /accounts/me/subscription/`)
         — `patients_trial_expired` is the count of patients currently soft-locked
-        out of clinical write actions.
+        out of clinical write actions. `active_users_last_30_days` is approximated
+        from `last_login` recency — there's no real-time online/presence tracking
+        (no websocket/heartbeat), so this is a proxy, not live status. `new_patients_growth_percent`
+        compares this calendar month's new patient registrations to last month's;
+        `null` if last month had zero (percentage change is undefined, not zero, in
+        that case). `average_doctor_rating`/`total_doctor_ratings` come from `POST
+        /appointments/{id}/rate/`; `null`/`0` until at least one completed appointment
+        has been rated. `range_stats` is `null` unless both `?date_from=` and `?date_to=`
+        (`YYYY-MM-DD`, inclusive) are supplied — an additive custom-range view alongside
+        the fixed today/week/month windows above, not a replacement for them.
       summary: System-wide statistics / dashboard (admin only)
+      parameters:
+      - in: query
+        name: date_from
+        schema:
+          type: string
+        description: YYYY-MM-DD, inclusive. Must be supplied together with date_to.
+      - in: query
+        name: date_to
+        schema:
+          type: string
+        description: YYYY-MM-DD, inclusive. Must be supplied together with date_from.
       tags:
       - Reports
       security:
@@ -5356,7 +5460,33 @@ paths:
                     patients_paid: 12
                     patients_on_trial: 98
                     patients_trial_expired: 18
+                    active_users_last_30_days: 87
+                    new_patients_growth_percent: 12.5
+                    average_doctor_rating: 4.8
+                    total_doctor_ratings: 63
+                    range_stats: null
                   summary: 200 OK
+                200OK—With?dateFrom=&dateTo=:
+                  value:
+                    range_stats:
+                      date_from: '2026-08-01'
+                      date_to: '2026-08-06'
+                      appointments_in_range: 23
+                      new_patients_in_range: 9
+                      new_doctors_in_range: 1
+                  summary: 200 OK — with ?date_from=&date_to=
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailResponse'
+              examples:
+                400MissingDateTo:
+                  value:
+                    detail: Both date_from and date_to are required together.
+                    errors: null
+                  summary: 400 Missing date_to
           description: ''
   /api/v1/reports/search/:
     get:
@@ -5667,16 +5797,37 @@ components:
           type: integer
         patients_trial_expired:
           type: integer
+        active_users_last_30_days:
+          type: integer
+        new_patients_growth_percent:
+          type: number
+          format: double
+          nullable: true
+        average_doctor_rating:
+          type: number
+          format: double
+          nullable: true
+        total_doctor_ratings:
+          type: integer
+        range_stats:
+          allOf:
+          - $ref: '#/components/schemas/RangeStats'
+          nullable: true
       required:
       - active_sos_events
+      - active_users_last_30_days
       - appointments_this_month
+      - average_doctor_rating
+      - new_patients_growth_percent
       - new_patients_this_week
       - patients_on_trial
       - patients_paid
       - patients_trial_expired
+      - range_stats
       - recent_activities
       - today_appointments
       - total_appointments
+      - total_doctor_ratings
       - total_doctors
       - total_patients
       - trimester_distribution
@@ -6312,11 +6463,25 @@ components:
           format: double
           nullable: true
           readOnly: true
+        average_rating:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        total_ratings:
+          type: integer
+          readOnly: true
+        completed_appointments_count:
+          type: integer
+          readOnly: true
       required:
+      - average_rating
+      - completed_appointments_count
       - distance_km
       - doctor_profile
       - email
       - id
+      - total_ratings
     DoctorMessageRequest:
       type: object
       properties:
@@ -6403,6 +6568,37 @@ components:
           format: decimal
           pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
           nullable: true
+    DoctorRating:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        score:
+          type: integer
+          maximum: 5
+          minimum: 1
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - score
+    DoctorRatingRequest:
+      type: object
+      properties:
+        score:
+          type: integer
+          maximum: 5
+          minimum: 1
+        comment:
+          type: string
+      required:
+      - score
     DoctorUpdate:
       type: object
       properties:
@@ -8119,6 +8315,27 @@ components:
       - lmp_date
       - percent_complete
       - trimester
+    RangeStats:
+      type: object
+      properties:
+        date_from:
+          type: string
+          format: date
+        date_to:
+          type: string
+          format: date
+        appointments_in_range:
+          type: integer
+        new_patients_in_range:
+          type: integer
+        new_doctors_in_range:
+          type: integer
+      required:
+      - appointments_in_range
+      - date_from
+      - date_to
+      - new_doctors_in_range
+      - new_patients_in_range
     ReadingContextEnum:
       enum:
       - fasting
@@ -8443,6 +8660,13 @@ components:
         * `patient_registered` - patient_registered
         * `appointment_booked` - appointment_booked
         * `sos_triggered` - sos_triggered
+    UnreadCount:
+      type: object
+      properties:
+        unread_count:
+          type: integer
+      required:
+      - unread_count
     VerifyEmailRequest:
       type: object
       properties:

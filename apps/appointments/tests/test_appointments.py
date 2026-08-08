@@ -214,3 +214,52 @@ class TestAdminAppointmentFilters:
         assert resp.status_code == status.HTTP_200_OK
         assert all(row["doctor"]["id"] == doctor_user.id for row in resp.data["results"])
         assert len(resp.data["results"]) == 1
+
+
+class TestDoctorRating:
+    def test_patient_can_rate_completed_appointment(self, patient_client, patient_user):
+        appt = AppointmentFactory(patient=patient_user, status=Appointment.Status.COMPLETED)
+        resp = patient_client.post(
+            reverse("appointment-rate", args=[appt.id]),
+            {"score": 5, "comment": "Great doctor"},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert resp.data["score"] == 5
+
+    def test_cannot_rate_a_non_completed_appointment(self, patient_client, patient_user):
+        appt = AppointmentFactory(patient=patient_user, status=Appointment.Status.CONFIRMED)
+        resp = patient_client.post(reverse("appointment-rate", args=[appt.id]), {"score": 4}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_cannot_rate_twice(self, patient_client, patient_user):
+        appt = AppointmentFactory(patient=patient_user, status=Appointment.Status.COMPLETED)
+        url = reverse("appointment-rate", args=[appt.id])
+        first = patient_client.post(url, {"score": 5}, format="json")
+        second = patient_client.post(url, {"score": 3}, format="json")
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_cannot_rate_someone_elses_appointment(self, patient_client):
+        appt = AppointmentFactory(status=Appointment.Status.COMPLETED)
+        resp = patient_client.post(reverse("appointment-rate", args=[appt.id]), {"score": 5}, format="json")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_doctor_cannot_rate_appointment(self, doctor_client, doctor_user):
+        appt = AppointmentFactory(doctor=doctor_user, status=Appointment.Status.COMPLETED)
+        resp = doctor_client.post(reverse("appointment-rate", args=[appt.id]), {"score": 5}, format="json")
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_score_out_of_range_rejected(self, patient_client, patient_user):
+        appt = AppointmentFactory(patient=patient_user, status=Appointment.Status.COMPLETED)
+        resp = patient_client.post(reverse("appointment-rate", args=[appt.id]), {"score": 6}, format="json")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_rating_reflected_in_doctor_list(self, patient_client, patient_user, admin_client, doctor_user):
+        appt = AppointmentFactory(patient=patient_user, doctor=doctor_user, status=Appointment.Status.COMPLETED)
+        patient_client.post(reverse("appointment-rate", args=[appt.id]), {"score": 4}, format="json")
+
+        resp = admin_client.get(reverse("doctor-detail", args=[doctor_user.id]))
+        assert resp.data["average_rating"] == 4.0
+        assert resp.data["total_ratings"] == 1
+        assert resp.data["completed_appointments_count"] == 1

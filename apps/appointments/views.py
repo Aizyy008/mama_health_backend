@@ -13,9 +13,10 @@ from apps.appointments.serializers import (
     AppointmentRescheduleSerializer,
     AppointmentSerializer,
     AppointmentStatusUpdateSerializer,
+    DoctorRatingSerializer,
 )
 from apps.core.constants import Role
-from apps.core.permissions import IsDoctorOrAdmin
+from apps.core.permissions import IsDoctorOrAdmin, IsPatient
 from apps.core.serializers import DetailResponseSerializer
 
 _APPOINTMENT_RESPONSE_EXAMPLE = {
@@ -242,3 +243,35 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(AppointmentSerializer(appointment).data)
+
+    @extend_schema(
+        tags=["Appointments"],
+        summary="Rate a completed appointment (patient only)",
+        description=(
+            "Patient-only, and only the appointment's own patient. Only allowed once the "
+            "appointment is `completed` (400 otherwise), and only once per appointment (400 on a "
+            "second attempt) — this is the data behind a doctor's `average_rating`/`total_ratings` "
+            "(see `GET /accounts/doctors/`) and the admin dashboard's `average_doctor_rating`."
+        ),
+        request=DoctorRatingSerializer,
+        responses={201: DoctorRatingSerializer, 400: DetailResponseSerializer},
+        examples=[
+            OpenApiExample("Request", value={"score": 5, "comment": "Very attentive and explained everything clearly."}, request_only=True),
+            OpenApiExample("201 Created", value={"id": 1, "score": 5, "comment": "Very attentive and explained everything clearly.", "created_at": "2026-08-06T10:00:00Z"}, response_only=True, status_codes=["201"]),
+            OpenApiExample("400 Not completed yet", value={"detail": "Only completed appointments can be rated.", "errors": None}, response_only=True, status_codes=["400"]),
+        ],
+    )
+    @action(detail=True, methods=["post"], url_path="rate", permission_classes=[permissions.IsAuthenticated, IsPatient, IsAppointmentParticipantOrAdmin])
+    def rate(self, request, pk=None):
+        appointment = self.get_object()
+        serializer = DoctorRatingSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            rating = services.rate_appointment(
+                appointment=appointment,
+                score=serializer.validated_data["score"],
+                comment=serializer.validated_data.get("comment", ""),
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(DoctorRatingSerializer(rating).data, status=status.HTTP_201_CREATED)

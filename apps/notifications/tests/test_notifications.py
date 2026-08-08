@@ -46,6 +46,16 @@ class TestNotificationInbox:
         assert resp.status_code == status.HTTP_200_OK
         assert Notification.objects.filter(recipient=patient_user, is_read=False).count() == 0
 
+    def test_unread_count(self, patient_client, patient_user):
+        Notification.objects.create(recipient=patient_user, notification_type="diet", title="a", body="b")
+        Notification.objects.create(
+            recipient=patient_user, notification_type="medicine", title="c", body="d", is_read=True
+        )
+        Notification.objects.create(recipient=PatientUserFactory(), notification_type="diet", title="e", body="f")
+        resp = patient_client.get(reverse("notification-unread-count"))
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["unread_count"] == 1
+
     def test_cannot_mark_another_users_notification_read(self, patient_client):
         n = Notification.objects.create(recipient=PatientUserFactory(), notification_type="diet", title="a", body="b")
         resp = patient_client.post(reverse("notification-mark-read", args=[n.id]))

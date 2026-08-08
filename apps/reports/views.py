@@ -92,8 +92,22 @@ class PatientSummaryReportView(generics.GenericAPIView):
         "appointment bookings, and SOS triggers, newest first. `patients_paid`/`patients_on_trial`/"
         "`patients_trial_expired` reflect the manual-payment subscription system (see "
         "`GET /accounts/me/subscription/`) — `patients_trial_expired` is the count of patients "
-        "currently soft-locked out of clinical write actions."
+        "currently soft-locked out of clinical write actions. `active_users_last_30_days` is "
+        "approximated from `last_login` recency — there's no real-time online/presence tracking "
+        "(no websocket/heartbeat), so this is a proxy, not live status. "
+        "`new_patients_growth_percent` compares this calendar month's new patient registrations "
+        "to last month's; `null` if last month had zero (percentage change is undefined, not "
+        "zero, in that case). `average_doctor_rating`/`total_doctor_ratings` come from "
+        "`POST /appointments/{id}/rate/`; `null`/`0` until at least one completed appointment has "
+        "been rated. `range_stats` is `null` unless both `?date_from=` and `?date_to=` "
+        "(`YYYY-MM-DD`, inclusive) are supplied — an additive custom-range view alongside the "
+        "fixed today/week/month windows above, not a replacement for them."
     ),
+    parameters=[
+        OpenApiParameter(name="date_from", type=str, location=OpenApiParameter.QUERY, required=False, description="YYYY-MM-DD, inclusive. Must be supplied together with date_to."),
+        OpenApiParameter(name="date_to", type=str, location=OpenApiParameter.QUERY, required=False, description="YYYY-MM-DD, inclusive. Must be supplied together with date_from."),
+    ],
+    responses={200: AdminStatsSerializer, 400: DetailResponseSerializer},
     examples=[
         OpenApiExample(
             "200 OK",
@@ -114,10 +128,27 @@ class PatientSummaryReportView(generics.GenericAPIView):
                 "patients_paid": 12,
                 "patients_on_trial": 98,
                 "patients_trial_expired": 18,
+                "active_users_last_30_days": 87,
+                "new_patients_growth_percent": 12.5,
+                "average_doctor_rating": 4.8,
+                "total_doctor_ratings": 63,
+                "range_stats": None,
             },
             response_only=True,
             status_codes=["200"],
-        )
+        ),
+        OpenApiExample(
+            "200 OK — with ?date_from=&date_to=",
+            value={"range_stats": {"date_from": "2026-08-01", "date_to": "2026-08-06", "appointments_in_range": 23, "new_patients_in_range": 9, "new_doctors_in_range": 1}},
+            response_only=True,
+            status_codes=["200"],
+        ),
+        OpenApiExample(
+            "400 Missing date_to",
+            value={"detail": "Both date_from and date_to are required together.", "errors": None},
+            response_only=True,
+            status_codes=["400"],
+        ),
     ],
 )
 class AdminStatsView(generics.GenericAPIView):
@@ -125,7 +156,30 @@ class AdminStatsView(generics.GenericAPIView):
     permission_classes = [IsAdmin]
 
     def get(self, request):
-        stats = services.build_admin_stats()
+        from django.utils.dateparse import parse_date
+
+        date_from_raw = request.query_params.get("date_from")
+        date_to_raw = request.query_params.get("date_to")
+        date_from = date_to = None
+        if date_from_raw or date_to_raw:
+            if not (date_from_raw and date_to_raw):
+                return Response(
+                    {"detail": "Both date_from and date_to are required together.", "errors": None},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            date_from, date_to = parse_date(date_from_raw), parse_date(date_to_raw)
+            if date_from is None or date_to is None:
+                return Response(
+                    {"detail": "date_from/date_to must be in YYYY-MM-DD format.", "errors": None},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if date_from > date_to:
+                return Response(
+                    {"detail": "date_from must be on or before date_to.", "errors": None},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        stats = services.build_admin_stats(date_from=date_from, date_to=date_to)
         return Response(self.get_serializer(stats).data)
 
 

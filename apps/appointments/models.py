@@ -1,3 +1,4 @@
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from apps.core.constants import Role
@@ -78,3 +79,27 @@ class PatientDoctorAssignment(models.Model):
 
     def __str__(self):
         return f"PatientDoctorAssignment<patient={self.patient_id}, doctor={self.doctor_id}>"
+
+
+class DoctorRating(TimeStampedModel):
+    """
+    One rating per completed appointment (enforced via the OneToOneField,
+    not a separate uniqueness check) — this is the "Doctor Performance"
+    data backing DoctorListSerializer's average_rating/total_ratings and
+    reports.services.build_admin_stats()'s average_doctor_rating.
+    """
+
+    appointment = models.OneToOneField(
+        Appointment, on_delete=models.CASCADE, related_name="rating"
+    )
+    patient = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="ratings_given"
+    )
+    doctor = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="ratings_received"
+    )
+    score = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    comment = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"DoctorRating<doctor={self.doctor_id}, score={self.score}>"

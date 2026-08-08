@@ -34,3 +34,7 @@ class DoctorMessageSerializer(serializers.Serializer):
     patient_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.filter(role=Role.PATIENT))
     title = serializers.CharField(max_length=200)
     body = serializers.CharField()
+
+
+class UnreadCountSerializer(serializers.Serializer):
+    unread_count = serializers.IntegerField()

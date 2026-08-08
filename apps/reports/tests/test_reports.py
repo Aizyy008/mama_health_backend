@@ -119,6 +119,67 @@ class TestAdminStats:
         assert resp.data["patients_trial_expired"] == 1
         assert resp.data["patients_on_trial"] == 1
 
+    def test_active_users_reflects_recent_last_login(self, admin_client):
+        recent = PatientUserFactory()
+        recent.last_login = timezone.now() - timedelta(days=2)
+        recent.save()
+
+        stale = DoctorUserFactory()
+        stale.last_login = timezone.now() - timedelta(days=90)
+        stale.save()
+
+        PatientUserFactory()  # never logged in — last_login is null, must not count
+
+        resp = admin_client.get(reverse("report-admin-stats"))
+        assert resp.data["active_users_last_30_days"] == 1
+
+    def test_new_patients_growth_percent_null_with_no_prior_month_baseline(self, admin_client):
+        PatientUserFactory()
+        resp = admin_client.get(reverse("report-admin-stats"))
+        assert resp.data["new_patients_growth_percent"] is None
+
+    def test_average_doctor_rating_reflects_ratings(self, admin_client, patient_client, patient_user, doctor_user):
+        from apps.appointments.models import Appointment
+
+        appt = AppointmentFactory(patient=patient_user, doctor=doctor_user, status=Appointment.Status.COMPLETED)
+        patient_client.post(reverse("appointment-rate", args=[appt.id]), {"score": 5}, format="json")
+
+        resp = admin_client.get(reverse("report-admin-stats"))
+        assert resp.data["average_doctor_rating"] == 5.0
+        assert resp.data["total_doctor_ratings"] == 1
+
+    def test_average_doctor_rating_null_with_no_ratings(self, admin_client):
+        resp = admin_client.get(reverse("report-admin-stats"))
+        assert resp.data["average_doctor_rating"] is None
+        assert resp.data["total_doctor_ratings"] == 0
+
+    def test_range_stats_null_without_date_params(self, admin_client):
+        resp = admin_client.get(reverse("report-admin-stats"))
+        assert resp.data["range_stats"] is None
+
+    def test_range_stats_populated_with_both_dates(self, admin_client, patient_user, doctor_user):
+        AppointmentFactory(patient=patient_user, doctor=doctor_user, scheduled_at=timezone.now())
+        today = timezone.now().date().isoformat()
+        resp = admin_client.get(reverse("report-admin-stats"), {"date_from": today, "date_to": today})
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["range_stats"]["appointments_in_range"] == 1
+
+    def test_range_stats_requires_both_dates_together(self, admin_client):
+        resp = admin_client.get(reverse("report-admin-stats"), {"date_from": "2026-08-01"})
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_range_stats_rejects_from_after_to(self, admin_client):
+        resp = admin_client.get(
+            reverse("report-admin-stats"), {"date_from": "2026-08-10", "date_to": "2026-08-01"}
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_range_stats_rejects_bad_format(self, admin_client):
+        resp = admin_client.get(
+            reverse("report-admin-stats"), {"date_from": "not-a-date", "date_to": "2026-08-01"}
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
 
 class TestGlobalSearch:
     def test_search_requires_admin(self, patient_client, doctor_client):

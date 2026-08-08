@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.accounts.models import User
 from apps.accounts.serializers import BriefUserSerializer
-from apps.appointments.models import Appointment
+from apps.appointments.models import Appointment, DoctorRating
 from apps.core.constants import Role
 
 
@@ -68,3 +68,10 @@ class AppointmentDoctorNotesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
         fields = ["doctor_notes"]
+
+
+class DoctorRatingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorRating
+        fields = ["id", "score", "comment", "created_at"]
+        read_only_fields = ["id", "created_at"]

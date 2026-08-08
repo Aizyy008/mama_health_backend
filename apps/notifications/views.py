@@ -8,7 +8,12 @@ from apps.core.permissions import IsAdmin, IsDoctor
 from apps.core.serializers import DetailResponseSerializer
 from apps.notifications import services
 from apps.notifications.models import Notification
-from apps.notifications.serializers import BroadcastSerializer, DoctorMessageSerializer, NotificationSerializer
+from apps.notifications.serializers import (
+    BroadcastSerializer,
+    DoctorMessageSerializer,
+    NotificationSerializer,
+    UnreadCountSerializer,
+)
 from apps.notifications.tasks import broadcast_notification
 
 TAG = "Notifications"
@@ -71,6 +76,18 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     def mark_all_read(self, request):
         updated = self.get_queryset().filter(is_read=False).update(is_read=True)
         return Response({"detail": f"{updated} notification(s) marked as read."})
+
+    @extend_schema(
+        tags=[TAG],
+        summary="Unread notification count",
+        description="For a notification-bell badge — own inbox only.",
+        responses={200: UnreadCountSerializer},
+        examples=[OpenApiExample("200 OK", value={"unread_count": 8}, response_only=True, status_codes=["200"])],
+    )
+    @action(detail=False, methods=["get"], url_path="unread-count")
+    def unread_count(self, request):
+        count = self.get_queryset().filter(is_read=False).count()
+        return Response({"unread_count": count})
 
 
 @extend_schema(

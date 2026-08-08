@@ -198,6 +198,9 @@ class DoctorInviteAcceptSerializer(serializers.Serializer):
 class DoctorListSerializer(serializers.ModelSerializer):
     doctor_profile = DoctorProfileSerializer(read_only=True)
     distance_km = serializers.SerializerMethodField()
+    average_rating = serializers.SerializerMethodField()
+    total_ratings = serializers.SerializerMethodField()
+    completed_appointments_count = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -211,7 +214,24 @@ class DoctorListSerializer(serializers.ModelSerializer):
             "date_joined",
             "doctor_profile",
             "distance_km",
+            "average_rating",
+            "total_ratings",
+            "completed_appointments_count",
         ]
+
+    def get_average_rating(self, obj) -> float | None:
+        from django.db.models import Avg
+
+        result = obj.ratings_received.aggregate(avg=Avg("score"))["avg"]
+        return round(result, 1) if result is not None else None
+
+    def get_total_ratings(self, obj) -> int:
+        return obj.ratings_received.count()
+
+    def get_completed_appointments_count(self, obj) -> int:
+        from apps.appointments.models import Appointment
+
+        return Appointment.objects.filter(doctor=obj, status=Appointment.Status.COMPLETED).count()
 
     def get_distance_km(self, obj) -> float | None:
         # Only populated for the ?lat=&lng= "near me" search — see

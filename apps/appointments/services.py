@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from apps.appointments.models import Appointment, PatientDoctorAssignment
+from apps.appointments.models import Appointment, DoctorRating, PatientDoctorAssignment
 from apps.core.constants import Role
 
 ALLOWED_TRANSITIONS = {
@@ -104,6 +104,20 @@ def reschedule_appointment(*, appointment: Appointment, actor, scheduled_at, dur
             channels=channels,
         )
     return appointment
+
+
+def rate_appointment(*, appointment: Appointment, score: int, comment: str = "") -> DoctorRating:
+    if appointment.status != Appointment.Status.COMPLETED:
+        raise ValueError("Only completed appointments can be rated.")
+    if DoctorRating.objects.filter(appointment=appointment).exists():
+        raise ValueError("This appointment has already been rated.")
+    return DoctorRating.objects.create(
+        appointment=appointment,
+        patient=appointment.patient,
+        doctor=appointment.doctor,
+        score=score,
+        comment=comment,
+    )
 
 
 def _notify_status_change(*, appointment: Appointment, actor):

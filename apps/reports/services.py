@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db.models import Avg
 from django.utils import timezone
 
 from apps.appointments.models import Appointment
@@ -46,17 +47,40 @@ def build_patient_summary(patient) -> dict:
     }
 
 
-def build_admin_stats() -> dict:
+def build_admin_stats(*, date_from=None, date_to=None) -> dict:
+    """
+    date_from/date_to (both optional, both-or-neither in practice — see
+    reports.views.AdminStatsView) add an extra `range_stats` block scoped
+    to that window, additive on top of the existing fixed-window fields
+    (today/week/month) so nothing already consuming this endpoint breaks.
+    """
     from apps.accounts.models import PatientProfile, User
+    from apps.appointments.models import DoctorRating
     from apps.core.constants import Role
     from apps.emergency.models import EmergencySOSEvent
 
     now = timezone.now()
     today = now.date()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_month_end = month_start
+    last_month_start = (month_start - timedelta(days=1)).replace(day=1)
     week_ago = now - timedelta(days=7)
+    thirty_days_ago = now - timedelta(days=30)
 
-    return {
+    new_patients_this_month = User.objects.filter(role=Role.PATIENT, date_joined__gte=month_start).count()
+    new_patients_last_month = User.objects.filter(
+        role=Role.PATIENT, date_joined__gte=last_month_start, date_joined__lt=last_month_end
+    ).count()
+    if new_patients_last_month:
+        growth_percent = round((new_patients_this_month - new_patients_last_month) / new_patients_last_month * 100, 1)
+    else:
+        # Undefined (divide-by-zero) rather than 0 — there's no prior-month
+        # baseline to compare against, not "no growth".
+        growth_percent = None
+
+    avg_rating = DoctorRating.objects.aggregate(avg=Avg("score"))["avg"]
+
+    stats = {
         "total_patients": User.objects.filter(role=Role.PATIENT).count(),
         "total_doctors": User.objects.filter(role=Role.DOCTOR).count(),
         "total_appointments": Appointment.objects.count(),
@@ -69,6 +93,35 @@ def build_admin_stats() -> dict:
         "patients_paid": PatientProfile.objects.filter(is_paid=True).count(),
         "patients_on_trial": PatientProfile.objects.filter(is_paid=False, trial_ends_at__gte=now).count(),
         "patients_trial_expired": PatientProfile.objects.filter(is_paid=False, trial_ends_at__lt=now).count(),
+        # Approximated via last_login recency (no websocket/heartbeat
+        # presence tracking exists) — not true real-time "online" status.
+        "active_users_last_30_days": User.objects.filter(
+            role__in=[Role.PATIENT, Role.DOCTOR], last_login__gte=thirty_days_ago
+        ).count(),
+        "new_patients_growth_percent": growth_percent,
+        "average_doctor_rating": round(avg_rating, 1) if avg_rating is not None else None,
+        "total_doctor_ratings": DoctorRating.objects.count(),
+        "range_stats": _build_range_stats(date_from, date_to) if date_from and date_to else None,
+    }
+    return stats
+
+
+def _build_range_stats(date_from, date_to) -> dict:
+    from apps.accounts.models import User
+    from apps.core.constants import Role
+
+    return {
+        "date_from": date_from,
+        "date_to": date_to,
+        "appointments_in_range": Appointment.objects.filter(
+            scheduled_at__date__gte=date_from, scheduled_at__date__lte=date_to
+        ).count(),
+        "new_patients_in_range": User.objects.filter(
+            role=Role.PATIENT, date_joined__date__gte=date_from, date_joined__date__lte=date_to
+        ).count(),
+        "new_doctors_in_range": User.objects.filter(
+            role=Role.DOCTOR, date_joined__date__gte=date_from, date_joined__date__lte=date_to
+        ).count(),
     }
 
 

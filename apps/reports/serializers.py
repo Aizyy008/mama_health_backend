@@ -40,6 +40,14 @@ class RecentActivitySerializer(serializers.Serializer):
     timestamp = serializers.DateTimeField()
 
 
+class RangeStatsSerializer(serializers.Serializer):
+    date_from = serializers.DateField()
+    date_to = serializers.DateField()
+    appointments_in_range = serializers.IntegerField()
+    new_patients_in_range = serializers.IntegerField()
+    new_doctors_in_range = serializers.IntegerField()
+
+
 class AdminStatsSerializer(serializers.Serializer):
     total_patients = serializers.IntegerField()
     total_doctors = serializers.IntegerField()
@@ -53,6 +61,11 @@ class AdminStatsSerializer(serializers.Serializer):
     patients_paid = serializers.IntegerField()
     patients_on_trial = serializers.IntegerField()
     patients_trial_expired = serializers.IntegerField()
+    active_users_last_30_days = serializers.IntegerField()
+    new_patients_growth_percent = serializers.FloatField(allow_null=True)
+    average_doctor_rating = serializers.FloatField(allow_null=True)
+    total_doctor_ratings = serializers.IntegerField()
+    range_stats = RangeStatsSerializer(allow_null=True)
 
 
 class SearchResultsSerializer(serializers.Serializer):
