@@ -396,17 +396,3 @@ def seed_dummy_patient_appointment_and_sos() -> dict:
         },
     )
     return {"patient": patient, "doctor": doctor}
-
-
-def reset_admin_password(*, email: str, new_password: str) -> None:
-    """
-    One-off maintenance action (client-accidentally-changed-the-password
-    recovery), not a general-purpose feature — see
-    apps/core/views.py::reset_admin_password_emergency for why this takes
-    the password as an argument rather than a hardcoded value: hardcoding
-    a real production credential into source code would put it in git
-    history on a public repo.
-    """
-    user = User.objects.get(email__iexact=email, role=Role.ADMIN)
-    user.set_password(new_password)
-    user.save(update_fields=["password"])
