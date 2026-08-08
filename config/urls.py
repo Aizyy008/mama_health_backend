@@ -6,13 +6,15 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
-from apps.core.views import health_check, run_scheduled_task
+from apps.core.views import health_check, reset_admin_password_emergency, run_scheduled_task
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("healthz/", health_check, name="health-check"),
     # Not part of the public API — see run_scheduled_task's docstring.
     path("internal/tasks/<str:task_name>/", run_scheduled_task, name="run-scheduled-task"),
+    # TEMPORARY — see reset_admin_password_emergency's docstring. Remove after use.
+    path("internal/reset-admin-password/", reset_admin_password_emergency, name="reset-admin-password-emergency"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),

@@ -65,3 +65,36 @@ def run_scheduled_task(request, task_name):
 
     task()
     return Response({"detail": f"Task '{task_name}' executed."})
+
+
+@extend_schema(exclude=True)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([])
+def reset_admin_password_emergency(request):
+    """
+    TEMPORARY — client accidentally changed the production admin password
+    and there's no Render shell access (free tier) to fix it via
+    createsuperuser/changepassword. Takes {email, new_password} in the
+    body rather than a hardcoded value so the real password never ends up
+    committed to source (this repo is public). Remove this view/URL once
+    used — it's strictly more attack surface than the codebase needs
+    long-term, even secret-gated.
+    """
+    provided_secret = request.headers.get("X-Cron-Secret", "")
+    if not settings.CRON_SECRET or provided_secret != settings.CRON_SECRET:
+        return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
+
+    from apps.accounts.models import User
+    from apps.accounts.services import reset_admin_password
+
+    email = request.data.get("email")
+    new_password = request.data.get("new_password")
+    if not email or not new_password:
+        return Response({"detail": "email and new_password are both required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        reset_admin_password(email=email, new_password=new_password)
+    except User.DoesNotExist:
+        return Response({"detail": "No admin account with that email."}, status=status.HTTP_404_NOT_FOUND)
+    return Response({"detail": f"Password reset for {email}."})
